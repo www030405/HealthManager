@@ -1,0 +1,32 @@
+pluginManagement {
+    repositories {
+        google {
+            content {
+                includeGroupByRegex("com\\.android.*")
+                includeGroupByRegex("com\\.google.*")
+                includeGroupByRegex("androidx.*")
+            }
+        }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+    }
+    
+    // ✅ 强制使用 tensorflow-lite，忽略 tensorflow-lite-api
+    components.all { component ->
+        if (component.id.group == 'org.tensorflow' && 
+            component.id.name == 'tensorflow-lite-api') {
+            component.become('org.tensorflow:tensorflow-lite')
+        }
+    }
+}
+
+rootProject.name = "HealthManager"
+include ':app'

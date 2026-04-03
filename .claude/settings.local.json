@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/lenovo/AppData/Roaming/Claude/local-agent-mode-sessions/skills-plugin/87a150f0-d0cf-4a1d-8497-3c872087d4ac/7c448336-ff17-481a-986c-932686a72e5c/skills/docx/**)",
+      "Bash(python scripts/office/soffice.py --headless --convert-to docx \"/c/Users/lenovo/Desktop/附件C-1.doc\")",
+      "Bash(SKILLDIR=\"C:/Users/lenovo/AppData/Roaming/Claude/local-agent-mode-sessions/skills-plugin/87a150f0-d0cf-4a1d-8497-3c872087d4ac/7c448336-ff17-481a-986c-932686a72e5c/skills/docx\")",
+      "Read(//c/WuhaoranGraduateEssay/AndroidStudioProjects/HealthManager/**)",
+      "Bash(python scripts/office/soffice.py --headless --convert-to docx \"C:/Users/lenovo/Desktop/kaiti.doc\")",
+      "Bash(pandoc --version)",
+      "Bash(\"/c/WuhaoranGraduateEssay/AndroidStudioProjects/HealthManager/app/build.gradle\":*)",
+      "Bash(find /c/WuhaoranGraduateEssay/AndroidStudioProjects/HealthManager/app/src/main/res/layout -type f -name *.xml)",
+      "Bash(wc -l /c/WuhaoranGraduateEssay/AndroidStudioProjects/HealthManager/app/src/main/java/com/example/healthmanager/ui/screen/*.kt)"
+    ]
+  }
+}
