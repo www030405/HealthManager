@@ -54,11 +54,20 @@ fun HomeScreen(navController: NavController) {
 
     val todaySteps by exerciseVm.todaySteps.collectAsState()
     val todayCalories by exerciseVm.todayCalories.collectAsState()
+    val sensorSteps by exerciseVm.sensorSteps.collectAsState()
+    val sensorCalories by exerciseVm.sensorCalories.collectAsState()
+    val isSensorAvailable = exerciseVm.isSensorAvailable
+    // 总卡路里 = 传感器估算 + 手动记录
+    val displayCalories = sensorCalories + todayCalories
     val hcSteps by hcVm.todayStepsFromHC.collectAsState()
     val hcPermission by hcVm.permissionGranted.collectAsState()
     val syncStatus by hcVm.syncStatus.collectAsState()
-    // 若 Health Connect 有数据则优先显示
-    val displaySteps = if (hcPermission && hcSteps > 0) hcSteps.toInt() else todaySteps
+    // 优先级：Health Connect > 传感器实时步数 > 数据库手动记录
+    val displaySteps = when {
+        hcPermission && hcSteps > 0 -> hcSteps.toInt()
+        sensorSteps > 0 -> sensorSteps
+        else -> todaySteps
+    }
     val today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日"))
 
     // 显示同步状态提示
@@ -127,6 +136,23 @@ fun HomeScreen(navController: NavController) {
                             Text("授权 Health Connect")
                         }
                     }
+                    
+                    // 传感器状态提示
+                    if (!isSensorAvailable && !hcVm.isAvailable) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "⚠️ 设备不支持硬件计步器（可能是模拟器）",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    } else if (sensorSteps > 0) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "✅ 传感器工作正常：$sensorSteps 步",
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                 }
             }
 
@@ -139,7 +165,11 @@ fun HomeScreen(navController: NavController) {
             ) {
                 SummaryCard(
                     modifier = Modifier.weight(1f),
-                    title = if (hcPermission) "步数 (HC)" else "步数",
+                    title = when {
+                        hcPermission && hcSteps > 0 -> "步数 (HC)"
+                        sensorSteps > 0 -> "步数 (实时)"
+                        else -> "步数"
+                    },
                     value = "$displaySteps",
                     unit = "步",
                     icon = Icons.Default.DirectionsWalk,
@@ -148,7 +178,7 @@ fun HomeScreen(navController: NavController) {
                 SummaryCard(
                     modifier = Modifier.weight(1f),
                     title = "消耗",
-                    value = String.format("%.0f", todayCalories),
+                    value = String.format("%.0f", displayCalories),
                     unit = "kcal",
                     icon = Icons.Default.LocalFireDepartment,
                     target = "目标达成"

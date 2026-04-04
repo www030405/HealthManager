@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.healthmanager.data.database.HealthDatabase
 import com.example.healthmanager.data.entity.ExerciseRecord
 import com.example.healthmanager.data.repository.ExerciseRepository
+import com.example.healthmanager.sensor.StepCounterManager
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -16,7 +17,30 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
     private val db = HealthDatabase.getDatabase(application)
     private val repo = ExerciseRepository(db.exerciseDao())
 
+    // 硬件计步传感器
+    private val stepCounter = StepCounterManager(application)
+    val sensorSteps: StateFlow<Int> = stepCounter.steps
+    val isSensorAvailable: Boolean = stepCounter.isAvailable
+
     private val _userId = MutableStateFlow(0)
+
+    // 用户体重（用于卡路里估算），默认70kg
+    private val userWeight: StateFlow<Float> = _userId
+        .flatMapLatest { uid ->
+            if (uid > 0) db.userDao().getUserById(uid).map { it?.weight?.takeIf { w -> w > 0f } ?: 70f }
+            else flowOf(70f)
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 70f)
+
+    /**
+     * 传感器步数估算卡路里
+     * 公式：卡路里(kcal) = 步数 × 步幅(km) × 体重(kg) × 1.036
+     * 平均步幅约0.7m，简化为：steps × 0.7 / 1000 × weight × 1.036
+     */
+    val sensorCalories: StateFlow<Float> =
+        combine(sensorSteps, userWeight) { steps, weight ->
+            steps * 0.7f / 1000f * weight * 1.036f
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
     private val _selectedDate = MutableStateFlow(todayStr())
 
     val selectedDate: StateFlow<String> = _selectedDate
@@ -56,6 +80,8 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
 
     fun init(userId: Int) {
         _userId.value = userId
+        // 启动硬件计步传感器
+        stepCounter.start()
     }
 
     fun setDate(date: String) {
@@ -104,6 +130,11 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun clearSaveResult() { _saveResult.value = null }
+
+    override fun onCleared() {
+        super.onCleared()
+        stepCounter.stop()
+    }
 
     private fun todayStr() = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
     private fun sevenDaysAgoStr() = LocalDate.now().minusDays(6).format(DateTimeFormatter.ISO_LOCAL_DATE)

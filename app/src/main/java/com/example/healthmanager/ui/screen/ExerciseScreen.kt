@@ -32,8 +32,13 @@ fun ExerciseScreen(navController: NavController) {
     LaunchedEffect(userId) { viewModel.init(userId) }
 
     val todaySteps by viewModel.todaySteps.collectAsState()
+    val sensorSteps by viewModel.sensorSteps.collectAsState()
+    val sensorCalories by viewModel.sensorCalories.collectAsState()
     val todayCalories by viewModel.todayCalories.collectAsState()
     val records by viewModel.todayRecords.collectAsState()
+    // 传感器实时步数 + 手动记录步数
+    val totalSteps = sensorSteps + todaySteps
+    val totalCalories = sensorCalories + todayCalories
     val saveResult by viewModel.saveResult.collectAsState()
 
     var showDialog by remember { mutableStateOf(false) }
@@ -86,14 +91,28 @@ fun ExerciseScreen(navController: NavController) {
                     ) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("今日步数", fontSize = 12.sp)
-                            Text("$todaySteps", fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                            Text("$totalSteps", fontSize = 28.sp, fontWeight = FontWeight.Bold)
                             Text("步", fontSize = 12.sp)
+                            if (sensorSteps > 0) {
+                                Text(
+                                    "传感器: $sensorSteps",
+                                    fontSize = 10.sp,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.outline
+                                )
+                            }
                         }
-                        Divider(modifier = Modifier.height(60.dp).width(1.dp))
+                        HorizontalDivider(modifier = Modifier.height(60.dp).width(1.dp))
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("消耗热量", fontSize = 12.sp)
-                            Text(String.format("%.0f", todayCalories), fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                            Text(String.format("%.0f", totalCalories), fontSize = 28.sp, fontWeight = FontWeight.Bold)
                             Text("kcal", fontSize = 12.sp)
+                            if (sensorCalories > 0) {
+                                Text(
+                                    "传感器: ${String.format("%.0f", sensorCalories)}",
+                                    fontSize = 10.sp,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.outline
+                                )
+                            }
                         }
                     }
                 }

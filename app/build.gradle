@@ -1,6 +1,5 @@
 plugins {
     alias(libs.plugins.android.application)
-   // alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
 }
@@ -27,26 +26,24 @@ android {
     }
 
     compileOptions {
-        sourceCompatibility JavaVersion.VERSION_1_8
-        targetCompatibility JavaVersion.VERSION_1_8
-    }
-
-    kotlin {
-        jvmToolchain 8
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
     }
 
     buildFeatures {
         compose true
     }
 
-    composeOptions {
-        kotlinCompilerExtensionVersion '1.5.1'
-    }
-    
     packaging {
         resources {
             excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE', 'META-INF/NOTICE']
         }
+    }
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
     }
 }
 
@@ -77,12 +74,9 @@ dependencies {
     // WorkManager
     implementation libs.androidx.work.runtime.ktx
 
-    // ✅ Health Connect（只保留一个）
-    implementation "androidx.health.connect:connect-client:1.1.0-alpha06"
+    // Health Connect
+    implementation libs.androidx.health.connect
 
-    // ❌ TensorFlow Lite（暂时注释掉，解决命名空间冲突）
-    // implementation 'org.tensorflow:tensorflow-lite:2.12.0'
-    
     // 图表
     implementation libs.mpandroidchart
 

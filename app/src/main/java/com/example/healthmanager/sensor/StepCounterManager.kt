@@ -1,10 +1,12 @@
 package com.example.healthmanager.sensor
 
 import android.content.Context
+import android.content.SharedPreferences
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -20,33 +22,135 @@ class StepCounterManager(context: Context) : SensorEventListener {
 
     // 设备重启后传感器的初始值（第一次读到时记录）
     private var initialSteps = -1L
+    
+    // 使用 SharedPreferences 持久化存储基准值
+    private val prefs: SharedPreferences = context.getSharedPreferences("step_counter_prefs", Context.MODE_PRIVATE)
+    private val KEY_INITIAL_STEPS = "initial_steps"
+    private val KEY_LAST_TOTAL_STEPS = "last_total_steps"
+    private val KEY_LAST_UPDATE_TIME = "last_update_time"
 
     private val _steps = MutableStateFlow(0)
     val steps: StateFlow<Int> = _steps
 
     val isAvailable: Boolean get() = stepSensor != null
+    
+    // 用于防抖，避免过于频繁的更新
+    private var lastUpdateStepCount = 0
 
     fun start() {
+        // 从持久化存储恢复基准值（如果有）
+        restoreInitialSteps()
+        
         stepSensor?.let {
-            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_UI)
+            // 使用最快的采样率
+            sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)
+            Log.d("StepCounter", "传感器已启动：${it.name} (FASTEST)")
+        } ?: run {
+            Log.e("StepCounter", "设备不支持计步传感器")
         }
     }
 
     fun stop() {
         sensorManager.unregisterListener(this)
+        // 保存当前状态
+        saveCurrentState()
+        Log.d("StepCounter", "传感器已停止")
+    }
+    
+    /**
+     * 从 SharedPreferences 恢复之前的基准值
+     * 这样即使应用重启，也能继续从上次的进度计算
+     */
+    private fun restoreInitialSteps() {
+        val savedInitialSteps = prefs.getLong(KEY_INITIAL_STEPS, -1L)
+        val lastTotalSteps = prefs.getLong(KEY_LAST_TOTAL_STEPS, -1L)
+        val lastUpdateTime = prefs.getLong(KEY_LAST_UPDATE_TIME, -1L)
+        
+        // 检查是否是同一天（简单判断：8 小时内）
+        val now = System.currentTimeMillis()
+        val isSameDay = lastUpdateTime > 0 && (now - lastUpdateTime) < 8 * 3600 * 1000
+        
+        if (savedInitialSteps >= 0 && lastTotalSteps >= 0 && isSameDay) {
+            // 恢复之前的基准值和相对步数
+            initialSteps = savedInitialSteps
+            _steps.value = (lastTotalSteps - savedInitialSteps).toInt()
+            lastUpdateStepCount = _steps.value
+            Log.d("StepCounter", "恢复之前的基准值：$initialSteps, 当前步数：${_steps.value}")
+        } else {
+            // 新的一天或首次使用，清除旧数据
+            prefs.edit().clear().apply()
+            Log.d("StepCounter", "清除旧数据，将使用新的基准值")
+        }
+    }
+    
+    /**
+     * 保存当前状态到 SharedPreferences
+     */
+    private fun saveCurrentState() {
+        if (initialSteps >= 0) {
+            prefs.edit().apply {
+                putLong(KEY_INITIAL_STEPS, initialSteps)
+                putLong(KEY_LAST_TOTAL_STEPS, initialSteps + _steps.value)
+                putLong(KEY_LAST_UPDATE_TIME, System.currentTimeMillis())
+            }.apply()
+            Log.d("StepCounter", "保存状态：基准值=$initialSteps, 相对步数=${_steps.value}")
+        }
     }
 
     override fun onSensorChanged(event: SensorEvent?) {
         event ?: return
         if (event.sensor.type == Sensor.TYPE_STEP_COUNTER) {
             val totalSteps = event.values[0].toLong()
+            
             // 第一次收到数据时记录基准值
             if (initialSteps < 0) {
                 initialSteps = totalSteps
+                Log.d("StepCounter", "设置初始基准值：$initialSteps")
+                return
             }
-            _steps.value = (totalSteps - initialSteps).toInt()
+            
+            val currentSteps = (totalSteps - initialSteps).toInt()
+            
+            // 只有当步数真正变化时才更新
+            if (currentSteps != lastUpdateStepCount && currentSteps >= 0) {
+                lastUpdateStepCount = currentSteps
+                _steps.value = currentSteps
+                Log.d("StepCounter", "步数更新：$currentSteps 步 (总：$totalSteps)")
+                
+                // 实时更新持久化存储
+                saveCurrentState()
+            }
         }
     }
 
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    
+    /**
+     * 重置步数（用户手动清零时调用）
+     */
+    fun resetSteps() {
+        if (initialSteps >= 0) {
+            // 重新设置基准值为当前的总步数
+            initialSteps = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)
+                ?.let { sensor ->
+                    // 读取当前最新的总步数
+                    var currentTotal = 0L
+                    sensorManager.registerListener(object : SensorEventListener {
+                        override fun onSensorChanged(event: SensorEvent?) {
+                            if (event?.sensor?.type == Sensor.TYPE_STEP_COUNTER) {
+                                currentTotal = event.values[0].toLong()
+                                sensorManager.unregisterListener(this)
+                            }
+                        }
+                        override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+                    }, stepSensor, SensorManager.SENSOR_DELAY_FASTEST)
+                    currentTotal
+                } ?: initialSteps
+            
+            _steps.value = 0
+            lastUpdateStepCount = 0
+            saveCurrentState()
+            Log.d("StepCounter", "步数已重置，新基准值：$initialSteps")
+        }
+    }
 }

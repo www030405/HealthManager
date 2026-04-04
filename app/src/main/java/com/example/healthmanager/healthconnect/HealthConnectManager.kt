@@ -5,7 +5,7 @@ import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.*
-import androidx.health.connect.client.records.metadata.Metadata
+import androidx.health.connect.client.records.metadata.Metadata as RecordMetadata
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import java.time.Instant
@@ -91,7 +91,7 @@ class HealthConnectManager(private val context: Context) {
                 .getOffset(start),
             endZoneOffset = java.time.ZoneOffset.systemDefault().getRules()
                 .getOffset(end),
-            metadata = Metadata()
+            metadata = RecordMetadata()
         )
         client.insertRecords(listOf(record))
     }
@@ -127,7 +127,7 @@ class HealthConnectManager(private val context: Context) {
             endZoneOffset = java.time.ZoneOffset.systemDefault().getRules()
                 .getOffset(endTime),
             notes = notes,
-            metadata = Metadata()
+            metadata = RecordMetadata()
         )
         client.insertRecords(listOf(record))
     }
@@ -179,7 +179,7 @@ class HealthConnectManager(private val context: Context) {
             totalFat = androidx.health.connect.client.units.Mass.grams(fat),
             totalCarbohydrate = androidx.health.connect.client.units.Mass.grams(carbs),
             mealType = mealType,
-            metadata = Metadata()
+            metadata = RecordMetadata()
         )
         client.insertRecords(listOf(record))
     }
@@ -206,7 +206,7 @@ class HealthConnectManager(private val context: Context) {
             endZoneOffset = java.time.ZoneOffset.systemDefault().getRules().getOffset(endTime),
             exerciseType = exerciseType,
             title = title,
-            metadata = Metadata()
+            metadata = RecordMetadata()
         )
         client.insertRecords(listOf(record))
     }
