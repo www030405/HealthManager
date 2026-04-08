@@ -382,8 +382,15 @@ private fun ExerciseSessionPanel(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                if (exerciseType.needsSteps) {
-                    SessionMetric(label = "步数", value = "$sessionSteps", unit = "步")
+                when (exerciseType) {
+                    ExerciseType.WALKING, ExerciseType.RUNNING, ExerciseType.STAIR_CLIMBING -> {
+                        SessionMetric(label = "步数", value = "$sessionSteps", unit = "步")
+                    }
+                    ExerciseType.CYCLING, ExerciseType.SWIMMING -> {
+                        val distance = sessionSteps * 0.7f / 1000f
+                        SessionMetric(label = "距离", value = String.format("%.2f", distance), unit = "km")
+                    }
+                    else -> {}
                 }
                 SessionMetric(
                     label = "热量",
@@ -463,6 +470,15 @@ private fun formatTime(totalSeconds: Long): String {
 
 @Composable
 private fun TodaySummaryCard(totalSteps: Int, totalCalories: Float, exerciseType: String) {
+    val isDistanceType = exerciseType in listOf("骑行", "游泳")
+    val displayValue = if (isDistanceType) {
+        String.format("%.2f", totalSteps * 0.7f / 1000f)
+    } else {
+        "$totalSteps"
+    }
+    val unit = if (isDistanceType) "km" else "步"
+    val label = if (isDistanceType) "${exerciseType}距离" else "${exerciseType}步数"
+    
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -471,9 +487,9 @@ private fun TodaySummaryCard(totalSteps: Int, totalCalories: Float, exerciseType
             horizontalArrangement = Arrangement.SpaceAround
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("${exerciseType}步数", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("$totalSteps", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("步", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(displayValue, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text(unit, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("${exerciseType}热量", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
