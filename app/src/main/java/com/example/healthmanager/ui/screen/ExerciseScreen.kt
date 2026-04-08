@@ -1,6 +1,5 @@
 package com.example.healthmanager.ui.screen
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,9 +18,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.healthmanager.data.entity.ExerciseRecord
-import com.example.healthmanager.ui.viewmodel.ExerciseMode
+import com.example.healthmanager.ui.viewmodel.ExerciseType
 import com.example.healthmanager.ui.viewmodel.ExerciseViewModel
 import com.example.healthmanager.ui.viewmodel.ProfileViewModel
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,19 +33,20 @@ fun ExerciseScreen(navController: NavController) {
 
     LaunchedEffect(userId) { viewModel.init(userId) }
 
-    val currentMode by viewModel.currentMode.collectAsState()
+    val selectedType by viewModel.selectedType.collectAsState()
     val isExercising by viewModel.isExercising.collectAsState()
     val sessionSeconds by viewModel.sessionSeconds.collectAsState()
     val sessionSteps by viewModel.sessionSteps.collectAsState()
     val sessionCalories by viewModel.sessionCalories.collectAsState()
-    val sensorSteps by viewModel.sensorSteps.collectAsState()
     val todayCalories by viewModel.todayCalories.collectAsState()
     val todaySteps by viewModel.todaySteps.collectAsState()
     val records by viewModel.todayRecords.collectAsState()
     val gaitResult by viewModel.gaitResult.collectAsState()
     val saveResult by viewModel.saveResult.collectAsState()
+    val selectedDate by viewModel.selectedDate.collectAsState()
 
     var showDialog by remember { mutableStateOf(false) }
+    var showDatePicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(saveResult) {
         if (saveResult != null) {
@@ -53,19 +55,32 @@ fun ExerciseScreen(navController: NavController) {
         }
     }
 
+    val mergedRecords = remember(records, selectedType) {
+        if (selectedType == ExerciseType.ALL) {
+            mergeRecordsByType(records)
+        } else {
+            records
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("运动记录") },
+                title = { Text("运动") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showDatePicker = true }) {
+                        Icon(Icons.Default.CalendarToday, contentDescription = "选择日期")
                     }
                 }
             )
         },
         floatingActionButton = {
-            if (!isExercising) {
+            if (!isExercising && selectedType != ExerciseType.ALL) {
                 FloatingActionButton(onClick = { showDialog = true }) {
                     Icon(Icons.Default.Add, contentDescription = "手动添加")
                 }
@@ -82,50 +97,57 @@ fun ExerciseScreen(navController: NavController) {
                 .fillMaxSize()
                 .padding(padding)
                 .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // ========== 运动模式选择 ==========
             item {
-                Text("选择运动方式", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            }
-
-            item {
-                ExerciseModeSelector(
-                    currentMode = currentMode,
-                    isExercising = isExercising,
-                    onModeSelected = { viewModel.switchMode(it) }
+                DateDisplayCard(
+                    selectedDate = selectedDate,
+                    onClick = { showDatePicker = true }
                 )
             }
 
-            // ========== 运动面板 ==========
             item {
-                ExerciseSessionPanel(
-                    currentMode = currentMode,
-                    isExercising = isExercising,
-                    sessionSeconds = sessionSeconds,
-                    sessionSteps = sessionSteps,
-                    sessionCalories = sessionCalories,
-                    gaitLabel = gaitResult?.label,
-                    onStart = { viewModel.startExercise() },
-                    onStop = { viewModel.stopExercise() }
+                ExerciseTypeTabBar(
+                    selectedType = selectedType,
+                    onTypeSelected = { viewModel.selectType(it) },
+                    isExercising = isExercising
                 )
             }
 
-            // ========== 今日汇总 ==========
+            if (selectedType != ExerciseType.ALL) {
+                item {
+                    ExerciseSessionPanel(
+                        exerciseType = selectedType,
+                        isExercising = isExercising,
+                        sessionSeconds = sessionSeconds,
+                        sessionSteps = sessionSteps,
+                        sessionCalories = sessionCalories,
+                        gaitLabel = gaitResult?.label,
+                        onStart = { viewModel.startExercise() },
+                        onStop = { viewModel.stopExercise() }
+                    )
+                }
+            }
+
+            if (selectedType != ExerciseType.ALL) {
+                item {
+                    TodaySummaryCard(
+                        totalSteps = todaySteps,
+                        totalCalories = todayCalories,
+                        exerciseType = selectedType.label
+                    )
+                }
+            }
+
             item {
-                TodaySummaryCard(
-                    totalSteps = sensorSteps + todaySteps,
-                    totalCalories = todayCalories,
-                    sensorSteps = sensorSteps
+                Text(
+                    text = if (selectedType == ExerciseType.ALL) "今日运动" else "${selectedType.label}记录",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
                 )
             }
 
-            // ========== 运动记录列表 ==========
-            item {
-                Text("今日运动记录", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
-            }
-
-            if (records.isEmpty()) {
+            if (mergedRecords.isEmpty()) {
                 item {
                     Box(
                         modifier = Modifier
@@ -133,13 +155,25 @@ fun ExerciseScreen(navController: NavController) {
                             .padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("暂无记录，选择运动方式后开始运动", color = MaterialTheme.colorScheme.outline)
+                        Text("暂无${selectedType.label}记录", color = MaterialTheme.colorScheme.outline)
                     }
                 }
             }
 
-            items(records, key = { it.id }) { record ->
-                ExerciseRecordItem(record = record, onDelete = { viewModel.deleteRecord(record) })
+            items(mergedRecords, key = { it.id }) { record ->
+                ExerciseRecordItem(
+                    record = record,
+                    onDelete = {
+                        if (record.note.contains("条记录")) {
+                            val typeToDelete = record.exerciseType
+                            records.filter { it.exerciseType == typeToDelete }.forEach {
+                                viewModel.deleteRecord(it)
+                            }
+                        } else {
+                            viewModel.deleteRecord(record)
+                        }
+                    }
+                )
             }
         }
     }
@@ -153,72 +187,158 @@ fun ExerciseScreen(navController: NavController) {
             }
         )
     }
-}
 
-// ==================== 运动模式选择器 ====================
-
-@Composable
-private fun ExerciseModeSelector(
-    currentMode: ExerciseMode,
-    isExercising: Boolean,
-    onModeSelected: (ExerciseMode) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        ExerciseMode.entries.forEach { mode ->
-            val selected = mode == currentMode
-            val containerColor by animateColorAsState(
-                if (selected) MaterialTheme.colorScheme.primaryContainer
-                else MaterialTheme.colorScheme.surfaceVariant,
-                label = "modeColor"
-            )
-            Card(
-                modifier = Modifier.weight(1f),
-                onClick = { onModeSelected(mode) },
-                enabled = !isExercising,
-                colors = CardDefaults.cardColors(containerColor = containerColor)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
+    if (showDatePicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = LocalDate.parse(selectedDate)
+                .atStartOfDay(java.time.ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        )
+        
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { dateMillis ->
+                            val newDate = java.time.Instant.ofEpochMilli(dateMillis)
+                                .atZone(java.time.ZoneId.systemDefault())
+                                .toLocalDate()
+                                .format(DateTimeFormatter.ISO_LOCAL_DATE)
+                            viewModel.setDate(newDate)
+                        }
+                        showDatePicker = false
+                    }
                 ) {
-                    Icon(
-                        imageVector = modeIcon(mode),
-                        contentDescription = null,
-                        tint = if (selected) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        mode.label,
-                        fontSize = 12.sp,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                        color = if (selected) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("确定")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("取消")
                 }
             }
+        ) {
+            DatePicker(
+                state = datePickerState,
+                title = { Text("选择日期") },
+                showModeToggle = false
+            )
         }
     }
 }
 
-private fun modeIcon(mode: ExerciseMode): ImageVector = when (mode) {
-    ExerciseMode.WALKING -> Icons.Default.DirectionsWalk
-    ExerciseMode.RUNNING -> Icons.Default.DirectionsRun
-    ExerciseMode.CYCLING -> Icons.Default.DirectionsBike
-    ExerciseMode.SWIMMING -> Icons.Default.Pool
+private fun mergeRecordsByType(records: List<ExerciseRecord>): List<ExerciseRecord> {
+    val grouped = records.groupBy { "${it.date}_${it.exerciseType}" }
+    return grouped.map { (key, typeRecords) ->
+        if (typeRecords.size == 1) {
+            typeRecords.first()
+        } else {
+            val parts = key.split("_")
+            ExerciseRecord(
+                id = typeRecords.minOf { it.id },
+                userId = typeRecords.first().userId,
+                date = parts[0],
+                steps = typeRecords.sumOf { it.steps.toLong() }.toInt(),
+                caloriesBurned = typeRecords.sumOf { it.caloriesBurned.toDouble() }.toFloat(),
+                exerciseType = parts[1],
+                durationMinutes = typeRecords.sumOf { it.durationMinutes.toLong() }.toInt(),
+                distanceKm = typeRecords.sumOf { it.distanceKm.toDouble() }.toFloat(),
+                note = "${typeRecords.size}条记录合并",
+                createdAt = typeRecords.first().createdAt
+            )
+        }
+    }.sortedByDescending { it.createdAt }
 }
 
-// ==================== 运动会话面板 ====================
+@Composable
+private fun DateDisplayCard(selectedDate: String, onClick: () -> Unit) {
+    val displayDate = try {
+        val date = LocalDate.parse(selectedDate)
+        val today = LocalDate.now()
+        val yesterday = today.minusDays(1)
+        
+        when {
+            date == today -> "今天"
+            date == yesterday -> "昨天"
+            else -> date.format(DateTimeFormatter.ofPattern("yyyy年M月d日"))
+        }
+    } catch (e: Exception) {
+        selectedDate
+    }
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "📅 $displayDate",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            Icon(
+                imageVector = Icons.Default.ArrowDropDown,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+        }
+    }
+}
+
+@Composable
+private fun ExerciseTypeTabBar(
+    selectedType: ExerciseType,
+    onTypeSelected: (ExerciseType) -> Unit,
+    isExercising: Boolean
+) {
+    ScrollableTabRow(
+        selectedTabIndex = ExerciseType.entries.indexOf(selectedType),
+        edgePadding = 0.dp,
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.primary
+    ) {
+        ExerciseType.entries.forEach { type ->
+            Tab(
+                selected = type == selectedType,
+                onClick = { if (!isExercising) onTypeSelected(type) },
+                enabled = !isExercising,
+                text = { Text(type.label) },
+                icon = {
+                    Icon(
+                        imageVector = typeIcon(type),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+            )
+        }
+    }
+}
+
+private fun typeIcon(type: ExerciseType): ImageVector = when (type) {
+    ExerciseType.ALL -> Icons.Default.List
+    ExerciseType.WALKING -> Icons.Default.DirectionsWalk
+    ExerciseType.RUNNING -> Icons.Default.DirectionsRun
+    ExerciseType.STAIR_CLIMBING -> Icons.Default.Stairs
+    ExerciseType.CYCLING -> Icons.Default.DirectionsBike
+    ExerciseType.SWIMMING -> Icons.Default.Pool
+}
 
 @Composable
 private fun ExerciseSessionPanel(
-    currentMode: ExerciseMode,
+    exerciseType: ExerciseType,
     isExercising: Boolean,
     sessionSeconds: Long,
     sessionSteps: Int,
@@ -240,16 +360,14 @@ private fun ExerciseSessionPanel(
                 .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // 当前模式标题
             Text(
-                text = if (isExercising) "${currentMode.label}中..." else "准备${currentMode.label}",
+                text = if (isExercising) "${exerciseType.label}中..." else "准备${exerciseType.label}",
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // 计时器
             Text(
                 text = formatTime(sessionSeconds),
                 fontSize = 48.sp,
@@ -260,13 +378,11 @@ private fun ExerciseSessionPanel(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // 运动数据指标
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
-                // 走路/跑步模式显示步数
-                if (currentMode.needsSteps) {
+                if (exerciseType.needsSteps) {
                     SessionMetric(label = "步数", value = "$sessionSteps", unit = "步")
                 }
                 SessionMetric(
@@ -281,8 +397,7 @@ private fun ExerciseSessionPanel(
                 )
             }
 
-            // 走路/跑步模式下显示步态识别
-            if (currentMode.needsSteps && isExercising && gaitLabel != null) {
+            if (exerciseType.needsSteps && isExercising && gaitLabel != null) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Surface(
                     shape = MaterialTheme.shapes.small,
@@ -299,7 +414,6 @@ private fun ExerciseSessionPanel(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // 开始 / 结束按钮
             if (!isExercising) {
                 Button(
                     onClick = onStart,
@@ -309,7 +423,7 @@ private fun ExerciseSessionPanel(
                 ) {
                     Icon(Icons.Default.PlayArrow, contentDescription = null)
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("开始${currentMode.label}", fontSize = 16.sp)
+                    Text("开始${exerciseType.label}", fontSize = 16.sp)
                 }
             } else {
                 Button(
@@ -347,10 +461,8 @@ private fun formatTime(totalSeconds: Long): String {
     else String.format("%02d:%02d", minutes, seconds)
 }
 
-// ==================== 今日汇总 ====================
-
 @Composable
-private fun TodaySummaryCard(totalSteps: Int, totalCalories: Float, sensorSteps: Int) {
+private fun TodaySummaryCard(totalSteps: Int, totalCalories: Float, exerciseType: String) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier
@@ -359,12 +471,12 @@ private fun TodaySummaryCard(totalSteps: Int, totalCalories: Float, sensorSteps:
             horizontalArrangement = Arrangement.SpaceAround
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("今日总步数", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${exerciseType}步数", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text("$totalSteps", fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text("步", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("今日总热量", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("${exerciseType}热量", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(String.format("%.0f", totalCalories), fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text("kcal", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -372,11 +484,9 @@ private fun TodaySummaryCard(totalSteps: Int, totalCalories: Float, sensorSteps:
     }
 }
 
-// ==================== 运动记录列表项 ====================
-
 @Composable
 private fun ExerciseRecordItem(record: ExerciseRecord, onDelete: () -> Unit) {
-    val needsSteps = record.exerciseType in listOf("步行", "跑步")
+    val needsSteps = record.exerciseType in listOf("走路", "跑步", "上楼梯")
 
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -385,11 +495,11 @@ private fun ExerciseRecordItem(record: ExerciseRecord, onDelete: () -> Unit) {
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 运动类型图标
             Icon(
                 imageVector = when (record.exerciseType) {
-                    "步行" -> Icons.Default.DirectionsWalk
+                    "走路" -> Icons.Default.DirectionsWalk
                     "跑步" -> Icons.Default.DirectionsRun
+                    "上楼梯" -> Icons.Default.Stairs
                     "骑行" -> Icons.Default.DirectionsBike
                     "游泳" -> Icons.Default.Pool
                     else -> Icons.Default.FitnessCenter
@@ -404,7 +514,6 @@ private fun ExerciseRecordItem(record: ExerciseRecord, onDelete: () -> Unit) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(record.exerciseType.ifBlank { "运动" }, fontWeight = FontWeight.SemiBold)
 
-                // 根据运动类型显示不同数据
                 val details = buildString {
                     if (needsSteps && record.steps > 0) {
                         append("${record.steps}步")
@@ -419,6 +528,10 @@ private fun ExerciseRecordItem(record: ExerciseRecord, onDelete: () -> Unit) {
                         append(" · ")
                     }
                     append(String.format("%.1fkcal", record.caloriesBurned))
+                    if (record.note.contains("条记录")) {
+                        append(" · ")
+                        append(record.note)
+                    }
                 }
                 Text(
                     details,
@@ -426,7 +539,7 @@ private fun ExerciseRecordItem(record: ExerciseRecord, onDelete: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                if (record.note.isNotBlank()) {
+                if (record.note.isNotBlank() && !record.note.contains("条记录")) {
                     Text(record.note, fontSize = 12.sp, color = MaterialTheme.colorScheme.outline)
                 }
             }
@@ -441,17 +554,15 @@ private fun ExerciseRecordItem(record: ExerciseRecord, onDelete: () -> Unit) {
     }
 }
 
-// ==================== 手动添加对话框 ====================
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddExerciseDialog(
     onDismiss: () -> Unit,
     onConfirm: (String, Int, Int, Float, String) -> Unit
 ) {
-    val exerciseTypes = listOf("步行", "跑步", "骑行", "游泳", "其他")
-    var selectedType by remember { mutableStateOf("步行") }
-    val needsSteps = selectedType in listOf("步行", "跑步")
+    val exerciseTypes = listOf("走路", "跑步", "上楼梯", "骑行", "游泳", "其他")
+    var selectedType by remember { mutableStateOf("走路") }
+    val needsSteps = selectedType in listOf("走路", "跑步", "上楼梯")
     var steps by remember { mutableStateOf("") }
     var duration by remember { mutableStateOf("") }
     var distance by remember { mutableStateOf("") }
@@ -483,7 +594,6 @@ private fun AddExerciseDialog(
                         }
                     }
                 }
-                // 只有步行/跑步才显示步数输入
                 if (needsSteps) {
                     OutlinedTextField(
                         value = steps,

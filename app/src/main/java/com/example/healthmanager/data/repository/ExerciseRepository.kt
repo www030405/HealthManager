@@ -15,14 +15,23 @@ class ExerciseRepository(private val exerciseDao: ExerciseDao) {
     fun getRecordsByDate(userId: Int, date: String): Flow<List<ExerciseRecord>> =
         exerciseDao.getRecordsByDate(userId, date)
 
+    fun getRecordsByDateAndType(userId: Int, date: String, type: String): Flow<List<ExerciseRecord>> =
+        exerciseDao.getRecordsByDateAndType(userId, date, type)
+
     fun getRecordsSince(userId: Int, startDate: String): Flow<List<ExerciseRecord>> =
         exerciseDao.getRecordsSince(userId, startDate)
 
     fun getTotalStepsByDate(userId: Int, date: String): Flow<Int> =
         exerciseDao.getTotalStepsByDate(userId, date)
 
+    fun getTotalStepsByDateAndType(userId: Int, date: String, type: String): Flow<Int> =
+        exerciseDao.getTotalStepsByDateAndType(userId, date, type)
+
     fun getTotalCaloriesByDate(userId: Int, date: String): Flow<Float> =
         exerciseDao.getTotalCaloriesByDate(userId, date)
+
+    fun getTotalCaloriesByDateAndType(userId: Int, date: String, type: String): Flow<Float> =
+        exerciseDao.getTotalCaloriesByDateAndType(userId, date, type)
 
     fun getAllRecords(userId: Int): Flow<List<ExerciseRecord>> =
         exerciseDao.getAllRecords(userId)
