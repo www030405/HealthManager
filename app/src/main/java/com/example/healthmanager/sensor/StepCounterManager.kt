@@ -9,6 +9,8 @@ import android.hardware.SensorManager
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 /**
  * 计步传感器管理器
@@ -27,7 +29,7 @@ class StepCounterManager(context: Context) : SensorEventListener {
     private val prefs: SharedPreferences = context.getSharedPreferences("step_counter_prefs", Context.MODE_PRIVATE)
     private val KEY_INITIAL_STEPS = "initial_steps"
     private val KEY_LAST_TOTAL_STEPS = "last_total_steps"
-    private val KEY_LAST_UPDATE_TIME = "last_update_time"
+    private val KEY_LAST_DATE = "last_date"
 
     private val _steps = MutableStateFlow(0)
     val steps: StateFlow<Int> = _steps
@@ -59,27 +61,29 @@ class StepCounterManager(context: Context) : SensorEventListener {
     
     /**
      * 从 SharedPreferences 恢复之前的基准值
-     * 这样即使应用重启，也能继续从上次的进度计算
+     * 以 0 点为界限判断是否同一天
      */
     private fun restoreInitialSteps() {
         val savedInitialSteps = prefs.getLong(KEY_INITIAL_STEPS, -1L)
         val lastTotalSteps = prefs.getLong(KEY_LAST_TOTAL_STEPS, -1L)
-        val lastUpdateTime = prefs.getLong(KEY_LAST_UPDATE_TIME, -1L)
-        
-        // 检查是否是同一天（简单判断：8 小时内）
-        val now = System.currentTimeMillis()
-        val isSameDay = lastUpdateTime > 0 && (now - lastUpdateTime) < 8 * 3600 * 1000
-        
+        val lastDate = prefs.getString(KEY_LAST_DATE, null)
+
+        val todayStr = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+        val isSameDay = lastDate == todayStr
+
         if (savedInitialSteps >= 0 && lastTotalSteps >= 0 && isSameDay) {
-            // 恢复之前的基准值和相对步数
+            // 同一天，恢复之前的基准值和相对步数
             initialSteps = savedInitialSteps
             _steps.value = (lastTotalSteps - savedInitialSteps).toInt()
             lastUpdateStepCount = _steps.value
             Log.d("StepCounter", "恢复之前的基准值：$initialSteps, 当前步数：${_steps.value}")
         } else {
-            // 新的一天或首次使用，清除旧数据
+            // 新的一天或首次使用，清除旧数据，重新开始计步
             prefs.edit().clear().apply()
-            Log.d("StepCounter", "清除旧数据，将使用新的基准值")
+            initialSteps = -1L
+            _steps.value = 0
+            lastUpdateStepCount = 0
+            Log.d("StepCounter", "新的一天($todayStr)，重置计步器")
         }
     }
     
@@ -91,7 +95,7 @@ class StepCounterManager(context: Context) : SensorEventListener {
             prefs.edit().apply {
                 putLong(KEY_INITIAL_STEPS, initialSteps)
                 putLong(KEY_LAST_TOTAL_STEPS, initialSteps + _steps.value)
-                putLong(KEY_LAST_UPDATE_TIME, System.currentTimeMillis())
+                putString(KEY_LAST_DATE, LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE))
             }.apply()
             Log.d("StepCounter", "保存状态：基准值=$initialSteps, 相对步数=${_steps.value}")
         }

@@ -22,6 +22,9 @@ interface UserDao {
     @Query("SELECT * FROM users WHERE id = :userId LIMIT 1")
     fun getUserById(userId: Int): Flow<User?>
 
+    @Query("SELECT * FROM users WHERE id = :userId LIMIT 1")
+    suspend fun getUserByIdOnce(userId: Int): User?
+
     @Query("SELECT COUNT(*) FROM users WHERE username = :username")
     suspend fun isUsernameExists(username: String): Int
 }

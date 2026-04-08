@@ -70,6 +70,40 @@ object HealthNotificationManager {
     }
 
     /**
+     * 设置午夜步数归档任务
+     * 每天 0:00 执行，将传感器步数保存到数据库，使图表能显示历史步数
+     */
+    fun scheduleMidnightStepArchive(context: Context) {
+        val request = PeriodicWorkRequestBuilder<MidnightStepArchiveWorker>(
+            repeatInterval = 1,
+            repeatIntervalTimeUnit = TimeUnit.DAYS
+        )
+            .setInitialDelay(calculateDelayToMidnight(), TimeUnit.MILLISECONDS)
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            "midnight_step_archive",
+            ExistingPeriodicWorkPolicy.UPDATE,
+            request
+        )
+    }
+
+    /**
+     * 计算距离下一个午夜 0:00 的毫秒数
+     */
+    private fun calculateDelayToMidnight(): Long {
+        val now = java.util.Calendar.getInstance()
+        val midnight = java.util.Calendar.getInstance().apply {
+            add(java.util.Calendar.DAY_OF_MONTH, 1)
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        return midnight.timeInMillis - now.timeInMillis
+    }
+
+    /**
      * 计算距离下次提醒时间（默认每天早上8点提醒）
      */
     private fun calculateInitialDelay(): Long {

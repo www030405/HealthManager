@@ -34,6 +34,9 @@ class MainActivity : ComponentActivity() {
         // 启动每日运动提醒（可在设置中关闭）
         HealthNotificationManager.scheduleExerciseReminder(this)
 
+        // 启动午夜步数归档任务（将传感器步数保存到数据库，用于报告图表）
+        HealthNotificationManager.scheduleMidnightStepArchive(this)
+
         // 判断是否已登录
         val prefs = UserPreferences(this)
         val startDestination = if (prefs.isLoggedIn()) Screen.Home.route else Screen.Login.route

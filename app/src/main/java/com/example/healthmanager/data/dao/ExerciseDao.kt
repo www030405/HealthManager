@@ -32,6 +32,10 @@ interface ExerciseDao {
     @Query("SELECT COALESCE(SUM(caloriesBurned), 0) FROM exercise_records WHERE userId = :userId AND date = :date")
     fun getTotalCaloriesByDate(userId: Int, date: String): Flow<Float>
 
+    // 查询某用户某天的运动记录（非Flow版本，用于Worker）
+    @Query("SELECT * FROM exercise_records WHERE userId = :userId AND date = :date ORDER BY createdAt DESC")
+    suspend fun getRecordsByDateOnce(userId: Int, date: String): List<ExerciseRecord>
+
     // 查询所有记录（分页用）
     @Query("SELECT * FROM exercise_records WHERE userId = :userId ORDER BY date DESC, createdAt DESC")
     fun getAllRecords(userId: Int): Flow<List<ExerciseRecord>>
