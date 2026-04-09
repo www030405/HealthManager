@@ -38,6 +38,9 @@ class StepCounterManager(context: Context) : SensorEventListener {
     
     // 用于防抖，避免过于频繁的更新
     private var lastUpdateStepCount = 0
+    
+    // 记录上次检查的日期，用于检测跨天
+    private var lastCheckedDate: String? = null
 
     fun start() {
         // 从持久化存储恢复基准值（如果有）

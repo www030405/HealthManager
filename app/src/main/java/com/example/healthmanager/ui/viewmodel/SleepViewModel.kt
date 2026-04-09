@@ -69,9 +69,29 @@ class SleepViewModel(application: Application) : AndroidViewModel(application) {
             _saveResult.value = "请填写入睡和起床时间"
             return
         }
+        
+        // 格式化并解析时间
+        val formattedBedTime = formatTimeInput(bedTime)
+        val formattedWakeTime = formatTimeInput(wakeTime)
+        
+        if (formattedBedTime == null || formattedWakeTime == null) {
+            _saveResult.value = "时间格式不正确，请使用 HH:mm 格式（如：08:00）"
+            return
+        }
+        
         // 计算睡眠时长（考虑跨天情况）
-        val bed = LocalTime.parse(bedTime, DateTimeFormatter.ofPattern("HH:mm"))
-        val wake = LocalTime.parse(wakeTime, DateTimeFormatter.ofPattern("HH:mm"))
+        val bed = try {
+            LocalTime.parse(formattedBedTime, DateTimeFormatter.ofPattern("HH:mm"))
+        } catch (e: Exception) {
+            _saveResult.value = "入睡时间格式错误"
+            return
+        }
+        val wake = try {
+            LocalTime.parse(formattedWakeTime, DateTimeFormatter.ofPattern("HH:mm"))
+        } catch (e: Exception) {
+            _saveResult.value = "起床时间格式错误"
+            return
+        }
         val durationMinutes = if (wake.isAfter(bed)) {
             Duration.between(bed, wake).toMinutes()
         } else {
@@ -103,6 +123,46 @@ class SleepViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearSaveResult() { _saveResult.value = null }
+
+    /**
+     * 格式化时间输入，支持多种格式：
+     * - "8" -> "08:00"
+     * - "8:0" -> "08:00"
+     * - "8:00" -> "08:00"
+     * - "08:00" -> "08:00"
+     * - 无效输入 -> null
+     */
+    private fun formatTimeInput(input: String): String? {
+        val trimmed = input.trim()
+        if (trimmed.isEmpty()) return null
+        
+        return try {
+            when {
+                // 只有小时，如 "8"
+                !trimmed.contains(':') -> {
+                    val hour = trimmed.toIntOrNull()
+                    if (hour == null || hour < 0 || hour > 23) return null
+                    String.format("%02d:00", hour)
+                }
+                // 有冒号，如 "8:0", "8:00", "08:00"
+                else -> {
+                    val parts = trimmed.split(":")
+                    if (parts.size != 2) return null
+                    
+                    val hour = parts[0].toIntOrNull()
+                    val minute = parts[1].toIntOrNull()
+                    
+                    if (hour == null || minute == null) return null
+                    if (hour < 0 || hour > 23) return null
+                    if (minute < 0 || minute > 59) return null
+                    
+                    String.format("%02d:%02d", hour, minute)
+                }
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
 
     private fun todayStr() = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
     private fun sevenDaysAgoStr() = LocalDate.now().minusDays(6).format(DateTimeFormatter.ISO_LOCAL_DATE)

@@ -228,6 +228,39 @@ private fun AddSleepDialog(
     var wakeTime by remember { mutableStateOf("07:00") }
     var quality by remember { mutableIntStateOf(3) }
     var note by remember { mutableStateOf("") }
+    
+    // 格式化时间输入的辅助函数
+    fun formatTimeInput(input: String): String {
+        val trimmed = input.trim()
+        if (trimmed.isEmpty()) return input
+        
+        return try {
+            when {
+                // 只有小时，如 "8"
+                !trimmed.contains(':') -> {
+                    val hour = trimmed.toIntOrNull()
+                    if (hour == null || hour < 0 || hour > 23) return input
+                    String.format("%02d:00", hour)
+                }
+                // 有冒号，如 "8:0", "8:00", "08:00"
+                else -> {
+                    val parts = trimmed.split(":")
+                    if (parts.size != 2) return input
+                    
+                    val hour = parts[0].toIntOrNull()
+                    val minute = parts[1].toIntOrNull()
+                    
+                    if (hour == null || minute == null) return input
+                    if (hour < 0 || hour > 23) return input
+                    if (minute < 0 || minute > 59) return input
+                    
+                    String.format("%02d:%02d", hour, minute)
+                }
+            }
+        } catch (e: Exception) {
+            input
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -267,7 +300,14 @@ private fun AddSleepDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onConfirm(bedTime, wakeTime, quality, note) }) { Text("保存") }
+            TextButton(
+                onClick = {
+                    // 保存前自动格式化时间
+                    val formattedBedTime = formatTimeInput(bedTime)
+                    val formattedWakeTime = formatTimeInput(wakeTime)
+                    onConfirm(formattedBedTime, formattedWakeTime, quality, note)
+                }
+            ) { Text("保存") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
     )

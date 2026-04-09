@@ -155,7 +155,7 @@ fun ExerciseScreen(navController: NavController) {
                             .padding(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("暂无${selectedType.label}记录", color = MaterialTheme.colorScheme.outline)
+                        Text("暂无记录", color = MaterialTheme.colorScheme.outline)
                     }
                 }
             }
