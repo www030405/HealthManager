@@ -9,7 +9,15 @@
       "Bash(pandoc --version)",
       "Bash(\"/c/WuhaoranGraduateEssay/AndroidStudioProjects/HealthManager/app/build.gradle\":*)",
       "Bash(find /c/WuhaoranGraduateEssay/AndroidStudioProjects/HealthManager/app/src/main/res/layout -type f -name *.xml)",
-      "Bash(wc -l /c/WuhaoranGraduateEssay/AndroidStudioProjects/HealthManager/app/src/main/java/com/example/healthmanager/ui/screen/*.kt)"
+      "Bash(wc -l /c/WuhaoranGraduateEssay/AndroidStudioProjects/HealthManager/app/src/main/java/com/example/healthmanager/ui/screen/*.kt)",
+      "Bash(./gradlew compileDebugKotlin)",
+      "Bash(./gradlew processDebugMainManifest --info)",
+      "Bash(./gradlew assembleDebug)",
+      "Bash(./gradlew clean:*)",
+      "Bash(./gradlew dependencyInsight --dependency litert --configuration debugRuntimeClasspath)",
+      "WebSearch",
+      "WebFetch(domain:mvnrepository.com)",
+      "WebFetch(domain:ai.google.dev)"
     ]
   }
 }

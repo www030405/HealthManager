@@ -42,6 +42,7 @@ fun ExerciseScreen(navController: NavController) {
     val todaySteps by viewModel.todaySteps.collectAsState()
     val records by viewModel.todayRecords.collectAsState()
     val gaitResult by viewModel.gaitResult.collectAsState()
+    val usingCnn by viewModel.usingCnn.collectAsState()
     val saveResult by viewModel.saveResult.collectAsState()
     val selectedDate by viewModel.selectedDate.collectAsState()
 
@@ -123,6 +124,8 @@ fun ExerciseScreen(navController: NavController) {
                         sessionSteps = sessionSteps,
                         sessionCalories = sessionCalories,
                         gaitLabel = gaitResult?.label,
+                        gaitConfidence = gaitResult?.confidence,
+                        usingCnn = usingCnn,
                         onStart = { viewModel.startExercise() },
                         onStop = { viewModel.stopExercise() }
                     )
@@ -344,6 +347,8 @@ private fun ExerciseSessionPanel(
     sessionSteps: Int,
     sessionCalories: Float,
     gaitLabel: String?,
+    gaitConfidence: Float?,
+    usingCnn: Boolean,
     onStart: () -> Unit,
     onStop: () -> Unit
 ) {
@@ -406,16 +411,37 @@ private fun ExerciseSessionPanel(
 
             if (exerciseType.needsSteps && isExercising && gaitLabel != null) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    shape = MaterialTheme.shapes.small,
-                    color = MaterialTheme.colorScheme.secondaryContainer
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "步态识别: $gaitLabel",
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
+                    // CNN / 规则分类器标识
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = if (usingCnn) MaterialTheme.colorScheme.tertiaryContainer
+                        else MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Text(
+                            text = if (usingCnn) "1D CNN" else "规则分类",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            color = if (usingCnn) MaterialTheme.colorScheme.onTertiaryContainer
+                            else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    // 步态识别结果 + 置信度
+                    Surface(
+                        shape = MaterialTheme.shapes.small,
+                        color = MaterialTheme.colorScheme.secondaryContainer
+                    ) {
+                        Text(
+                            text = "步态: $gaitLabel ${String.format("%.0f%%", (gaitConfidence ?: 0f) * 100)}",
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
                 }
             }
 

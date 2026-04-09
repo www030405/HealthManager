@@ -34,6 +34,10 @@ android {
         compose true
     }
 
+    androidResources {
+        noCompress += ['tflite']
+    }
+
     packaging {
         resources {
             excludes += ['META-INF/DEPENDENCIES', 'META-INF/LICENSE', 'META-INF/NOTICE']
@@ -76,6 +80,9 @@ dependencies {
 
     // Health Connect
     implementation libs.androidx.health.connect
+
+    // LiteRT（原 TensorFlow Lite，1D CNN 步态分类）
+    implementation libs.litert
 
     // 图表
     implementation libs.mpandroidchart

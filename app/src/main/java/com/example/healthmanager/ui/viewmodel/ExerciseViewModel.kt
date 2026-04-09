@@ -37,6 +37,7 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
 
     private val gaitClassifier = GaitClassifier(application)
     val gaitResult: StateFlow<GaitResult?> = gaitClassifier.gaitResult
+    val usingCnn: StateFlow<Boolean> = gaitClassifier.usingCnn
 
     private val _userId = MutableStateFlow(0)
 
