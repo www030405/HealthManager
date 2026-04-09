@@ -19,14 +19,13 @@ import java.nio.channels.FileChannel
  * 1D CNN 步态分类器
  *
  * 使用 TensorFlow Lite 在手机端实时推理，识别步态类型：
- * - 0: 步行 (Walking)
- * - 1: 跑步 (Running)
- * - 2: 上楼 (Walking Upstairs)
- * - 3: 下楼 (Walking Downstairs)
- * - 4: 静止 (Sitting/Standing)
+ * - 0: 站立 (Stand)
+ * - 1: 步行 (Walking)
+ * - 2: 跑步 (Running)
+ * - 3: 上楼 (Stair-up)
  *
- * 基于 UCI HAR 数据集预训练，输入 9 通道：
- * total_acc(3) + body_acc(3) + body_gyro(3)
+ * 基于 KU-HAR 数据集预训练，输入 6 通道：
+ * acc(3) + gyro(3)
  * 128 帧滑动窗口
  * 模型文件：assets/gait_classifier.tflite
  */
@@ -34,20 +33,18 @@ class GaitClassifier(private val context: Context) : SensorEventListener {
 
     companion object {
         private const val TAG = "GaitClassifier"
-        const val WINDOW_SIZE = 128       // 滑动窗口大小（约1.28秒 @100Hz）
-        const val FEATURE_SIZE = 9        // UCI HAR 9通道: total_acc(3) + body_acc(3) + body_gyro(3)
-        const val NUM_CLASSES = 6         // UCI HAR 标准6类
+        const val WINDOW_SIZE = 128       // 滑动窗口大小（约2.56秒 @50Hz）
+        const val FEATURE_SIZE = 6        // KU-HAR 6通道: acc(3) + gyro(3)
+        const val NUM_CLASSES = 4         // KU-HAR 4类: Stand, Walk, Run, Stair-up
 
-        // UCI HAR 6类标签（原始顺序：WALKING, WALKING_UPSTAIRS, WALKING_DOWNSTAIRS, SITTING, STANDING, LAYING）
-        val LABELS = arrayOf("步行", "上楼", "下楼", "坐下", "站立", "躺下")
+        // KU-HAR 4类标签
+        val LABELS = arrayOf("静止", "步行", "跑步", "上楼梯")
 
         val EXERCISE_TYPES = intArrayOf(
-            56,  // EXERCISE_TYPE_WALKING
-            28,  // EXERCISE_TYPE_STAIR_CLIMBING（上楼）
-            28,  // EXERCISE_TYPE_STAIR_CLIMBING（下楼）
-            -1,  // 坐下，不写入运动记录
             -1,  // 站立，不写入运动记录
-            -1   // 躺下，不写入运动记录
+            56,  // 步行
+            57,  // 跑步
+            28   // 上楼梯
         )
 
         private const val MODEL_FILE = "gait_classifier.tflite"
@@ -57,14 +54,14 @@ class GaitClassifier(private val context: Context) : SensorEventListener {
     }
 
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
-    private val accSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
-    private val gyroSensor = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
+    private val accSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
+    private val gyroSensor: Sensor? = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
 
-    // 滑动窗口数据缓冲区 — 每帧 9 个特征
-    // [total_acc_x, total_acc_y, total_acc_z, body_acc_x, body_acc_y, body_acc_z, gyro_x, gyro_y, gyro_z]
+    // 滑动窗口数据缓冲区 — 每帧 6 个特征
+    // [acc_x, acc_y, acc_z, gyro_x, gyro_y, gyro_z]
     private val dataBuffer = ArrayDeque<FloatArray>()
     private val gyroBuffer = ArrayDeque<FloatArray>()
-
+    
     // 重力估计值（低通滤波器持续更新）
     private val gravity = FloatArray(3)
 
@@ -124,6 +121,7 @@ class GaitClassifier(private val context: Context) : SensorEventListener {
     }
 
     fun startListening() {
+        // 使用 GAME 延迟（约50Hz），足够用于步态分类
         accSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
         gyroSensor?.let { sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
     }
@@ -136,43 +134,51 @@ class GaitClassifier(private val context: Context) : SensorEventListener {
         event ?: return
         when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> {
-                val totalAcc = floatArrayOf(event.values[0], event.values[1], event.values[2])
-
+                // 转换 m/s² 并去除重力（与 KU-HAR 数据一致）
+                val accX = event.values[0]
+                val accY = event.values[1]
+                val accZ = event.values[2]
+                
                 // 低通滤波分离重力
-                gravity[0] = GRAVITY_ALPHA * gravity[0] + (1 - GRAVITY_ALPHA) * totalAcc[0]
-                gravity[1] = GRAVITY_ALPHA * gravity[1] + (1 - GRAVITY_ALPHA) * totalAcc[1]
-                gravity[2] = GRAVITY_ALPHA * gravity[2] + (1 - GRAVITY_ALPHA) * totalAcc[2]
-
-                // body_acc = total_acc - gravity
-                val bodyAcc = floatArrayOf(
-                    totalAcc[0] - gravity[0],
-                    totalAcc[1] - gravity[1],
-                    totalAcc[2] - gravity[2]
-                )
+                gravity[0] = GRAVITY_ALPHA * gravity[0] + (1 - GRAVITY_ALPHA) * accX
+                gravity[1] = GRAVITY_ALPHA * gravity[1] + (1 - GRAVITY_ALPHA) * accY
+                gravity[2] = GRAVITY_ALPHA * gravity[2] + (1 - GRAVITY_ALPHA) * accZ
+                
+                // body_acc = total_acc - gravity（去除重力后的线性加速度）
+                val bodyAccX = accX - gravity[0]
+                val bodyAccY = accY - gravity[1]
+                val bodyAccZ = accZ - gravity[2]
 
                 accFrameCount++
 
-                // 构建 9 通道特征帧（陀螺仪暂时占位 0，等 gyro 事件更新）
+                // 构建 6 通道特征帧：body_acc(3) + gyro(3)
+                // 陀螺仪数据由 gyro 事件更新
                 val frame = floatArrayOf(
-                    totalAcc[0], totalAcc[1], totalAcc[2],  // total_acc
-                    bodyAcc[0], bodyAcc[1], bodyAcc[2],     // body_acc
-                    0f, 0f, 0f                               // body_gyro（下面由 gyro 更新）
+                    bodyAccX, bodyAccY, bodyAccZ,  // body_acc (3通道)
+                    0f, 0f, 0f                      // gyro (占位，由下面更新)
                 )
 
                 // 用最新的陀螺仪数据填充
                 if (gyroBuffer.isNotEmpty()) {
                     val latestGyro = gyroBuffer.last()
-                    frame[6] = latestGyro[0]
-                    frame[7] = latestGyro[1]
-                    frame[8] = latestGyro[2]
+                    frame[3] = latestGyro[0]
+                    frame[4] = latestGyro[1]
+                    frame[5] = latestGyro[2]
                 }
 
                 dataBuffer.addLast(frame)
                 if (dataBuffer.size > WINDOW_SIZE) dataBuffer.removeFirst()
+                
+                // 调试：打印前10帧的数据范围
+                if (accFrameCount == WINDOW_SIZE) {
+                    val allData = dataBuffer.toList().flatMap { it.toList() }
+                    Log.d(TAG, "输入数据范围: min=${allData.minOrNull()}, max=${allData.maxOrNull()}, mean=${allData.average()}")
+                }
 
-                // 峰值检测计步
+                // 峰值检测计步（使用原始 m/s² 值）
+                val rawX = event.values[0]; val rawY = event.values[1]; val rawZ = event.values[2]
                 val magnitude = Math.sqrt(
-                    (totalAcc[0] * totalAcc[0] + totalAcc[1] * totalAcc[1] + totalAcc[2] * totalAcc[2]).toDouble()
+                    (rawX * rawX + rawY * rawY + rawZ * rawZ).toDouble()
                 ).toFloat()
                 val now = System.currentTimeMillis()
                 if (magnitude > stepThreshold && lastMagnitude <= stepThreshold
@@ -216,23 +222,25 @@ class GaitClassifier(private val context: Context) : SensorEventListener {
 
     /**
      * TFLite 1D CNN 推理
-     * 输入形状：[1, 128, 9] — 128帧 × 9通道
-     * 输出形状：[1, 5] — 5类概率
+     * 输入形状：[1, 9, 128] — 9通道 × 128帧 (Conv1d 格式)
+     * 输出形状：[1, 6] — 6类概率
      */
     private fun runCnnInference() {
         val interp = interpreter ?: return
 
         try {
-            // 构建输入 ByteBuffer：[1, 128, 9] float32 = 4608 bytes
-            val inputBuffer = ByteBuffer.allocateDirect(4 * WINDOW_SIZE * FEATURE_SIZE)
+            // 构建输入 ByteBuffer：[1, 9, 128] float32 = 4608 bytes
+            // 格式: (batch, channels, length) = Conv1d 格式
+            val inputBuffer = ByteBuffer.allocateDirect(4 * FEATURE_SIZE * WINDOW_SIZE)
             inputBuffer.order(ByteOrder.nativeOrder())
 
             val frames = dataBuffer.toList()
 
-            for (i in 0 until WINDOW_SIZE) {
-                val frame = frames[i]
-                for (j in 0 until FEATURE_SIZE) {
-                    inputBuffer.putFloat(frame[j])
+            // 按 Conv1d 格式组织: 先遍历所有通道，再遍历所有时间步
+            for (channel in 0 until FEATURE_SIZE) {
+                for (i in 0 until WINDOW_SIZE) {
+                    val frame = frames[i]
+                    inputBuffer.putFloat(frame[channel])
                 }
             }
             inputBuffer.rewind()
@@ -242,7 +250,20 @@ class GaitClassifier(private val context: Context) : SensorEventListener {
 
             interp.run(inputBuffer, output)
 
-            val probabilities = output[0]
+            val logits = output[0]
+            
+            // 计算 Softmax
+            val maxLogit = logits.maxOrNull() ?: 0f
+            var sum = 0f
+            val probabilities = FloatArray(NUM_CLASSES)
+            for (i in 0 until NUM_CLASSES) {
+                probabilities[i] = Math.exp((logits[i] - maxLogit).toDouble()).toFloat()
+                sum += probabilities[i]
+            }
+            for (i in 0 until NUM_CLASSES) {
+                probabilities[i] /= sum
+            }
+            
             var maxIndex = 0
             var maxProb = probabilities[0]
             for (i in 1 until NUM_CLASSES) {
@@ -253,6 +274,7 @@ class GaitClassifier(private val context: Context) : SensorEventListener {
             }
 
             Log.d(TAG, "CNN推理: ${LABELS[maxIndex]}(${String.format("%.1f%%", maxProb * 100)}) " +
+                    "[${logits.joinToString { String.format("%.2f", it) }}] -> " +
                     "[${probabilities.joinToString { String.format("%.2f", it) }}]")
 
             _gaitResult.value = GaitResult(
@@ -278,7 +300,7 @@ class GaitClassifier(private val context: Context) : SensorEventListener {
      * 规则基础备用分类器
      */
     private fun ruleBasedClassification(): Int {
-        if (dataBuffer.size < WINDOW_SIZE) return 3 // 坐下(静止)
+        if (dataBuffer.size < WINDOW_SIZE) return 0 // 站立(默认)
 
         val magnitudes = dataBuffer.map { frame ->
             Math.sqrt((frame[0] * frame[0] + frame[1] * frame[1] + frame[2] * frame[2]).toDouble()).toFloat()
@@ -286,12 +308,12 @@ class GaitClassifier(private val context: Context) : SensorEventListener {
         val mean = magnitudes.average().toFloat()
         val variance = magnitudes.map { (it - mean) * (it - mean) }.average().toFloat()
 
-        // 索引对应: 0=步行, 1=上楼, 2=下楼, 3=坐下, 4=站立, 5=躺下
+        // 索引对应: 0=站立, 1=步行, 2=跑步, 3=上楼梯
         return when {
-            variance < 0.5f -> 3  // 坐下(静止)
-            mean < 10f && variance < 2f -> 0  // 步行
-            mean > 13f || variance > 5f -> 0  // 快步走（规则分类器无法区分跑步，归为步行）
-            else -> 0  // 默认步行
+            variance < 5f -> 0  // 站立(静止)
+            mean < 15f -> 1     // 步行
+            mean > 20f -> 2     // 跑步
+            else -> 1           // 默认步行
         }
     }
 

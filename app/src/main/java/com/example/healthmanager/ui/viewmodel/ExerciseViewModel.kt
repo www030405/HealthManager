@@ -158,8 +158,25 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
             while (_isExercising.value) {
                 delay(1000)
                 _sessionSeconds.value += 1
+                
                 if (currentType.needsSteps) {
-                    _sessionSteps.value = sensorSteps.value - sessionStartSensorSteps
+                    val detectedGait = gaitClassifier.gaitResult.value
+                    val detectedClass = detectedGait?.classIndex ?: 0
+                    
+                    val shouldCountSteps = when (currentType) {
+                        // 走路模式：步行、跑步、上楼梯都可以增加步数
+                        ExerciseType.WALKING -> detectedClass in 1..3
+                        // 跑步模式：只有跑步可以增加步数
+                        ExerciseType.RUNNING -> detectedClass == 2
+                        // 上楼梯模式：只有上楼梯可以增加步数
+                        ExerciseType.STAIR_CLIMBING -> detectedClass == 3
+                        else -> false
+                    }
+                    
+                    if (shouldCountSteps) {
+                        _sessionSteps.value = sensorSteps.value - sessionStartSensorSteps
+                    }
+                    Log.d("Exercise", "步态检测: ${detectedGait?.label}, 步数: ${_sessionSteps.value}")
                 }
             }
         }

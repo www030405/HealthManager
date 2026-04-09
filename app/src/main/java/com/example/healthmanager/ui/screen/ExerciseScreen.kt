@@ -3,7 +3,6 @@ package com.example.healthmanager.ui.screen
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -12,7 +11,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -46,7 +44,6 @@ fun ExerciseScreen(navController: NavController) {
     val saveResult by viewModel.saveResult.collectAsState()
     val selectedDate by viewModel.selectedDate.collectAsState()
 
-    var showDialog by remember { mutableStateOf(false) }
     var showDatePicker by remember { mutableStateOf(false) }
 
     LaunchedEffect(saveResult) {
@@ -79,13 +76,6 @@ fun ExerciseScreen(navController: NavController) {
                     }
                 }
             )
-        },
-        floatingActionButton = {
-            if (!isExercising && selectedType != ExerciseType.ALL) {
-                FloatingActionButton(onClick = { showDialog = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "手动添加")
-                }
-            }
         },
         snackbarHost = {
             saveResult?.let {
@@ -179,16 +169,6 @@ fun ExerciseScreen(navController: NavController) {
                 )
             }
         }
-    }
-
-    if (showDialog) {
-        AddExerciseDialog(
-            onDismiss = { showDialog = false },
-            onConfirm = { type, steps, duration, distance, note ->
-                viewModel.addRecord(type, steps, duration, distance, note)
-                showDialog = false
-            }
-        )
     }
 
     if (showDatePicker) {
@@ -503,7 +483,6 @@ private fun TodaySummaryCard(totalSteps: Int, totalCalories: Float, exerciseType
         "$totalSteps"
     }
     val unit = if (isDistanceType) "km" else "步"
-    val label = if (isDistanceType) "${exerciseType}距离" else "${exerciseType}步数"
     
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -513,12 +492,12 @@ private fun TodaySummaryCard(totalSteps: Int, totalCalories: Float, exerciseType
             horizontalArrangement = Arrangement.SpaceAround
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("步数", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(displayValue, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text(unit, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("${exerciseType}热量", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("热量", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(String.format("%.0f", totalCalories), fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text("kcal", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -594,96 +573,4 @@ private fun ExerciseRecordItem(record: ExerciseRecord, onDelete: () -> Unit) {
             }
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun AddExerciseDialog(
-    onDismiss: () -> Unit,
-    onConfirm: (String, Int, Int, Float, String) -> Unit
-) {
-    val exerciseTypes = listOf("走路", "跑步", "上楼梯", "骑行", "游泳", "其他")
-    var selectedType by remember { mutableStateOf("走路") }
-    val needsSteps = selectedType in listOf("走路", "跑步", "上楼梯")
-    var steps by remember { mutableStateOf("") }
-    var duration by remember { mutableStateOf("") }
-    var distance by remember { mutableStateOf("") }
-    var note by remember { mutableStateOf("") }
-    var expanded by remember { mutableStateOf(false) }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("手动添加运动记录") },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                    OutlinedTextField(
-                        value = selectedType,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("运动类型") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-                        modifier = Modifier
-                            .menuAnchor()
-                            .fillMaxWidth()
-                    )
-                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        exerciseTypes.forEach { type ->
-                            DropdownMenuItem(
-                                text = { Text(type) },
-                                onClick = { selectedType = type; expanded = false }
-                            )
-                        }
-                    }
-                }
-                if (needsSteps) {
-                    OutlinedTextField(
-                        value = steps,
-                        onValueChange = { steps = it },
-                        label = { Text("步数") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
-                    )
-                }
-                OutlinedTextField(
-                    value = duration,
-                    onValueChange = { duration = it },
-                    label = { Text("时长（分钟）") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = distance,
-                    onValueChange = { distance = it },
-                    label = { Text("距离（公里，选填）") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("备注（选填）") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                onConfirm(
-                    selectedType,
-                    if (needsSteps) steps.toIntOrNull() ?: 0 else 0,
-                    duration.toIntOrNull() ?: 0,
-                    distance.toFloatOrNull() ?: 0f,
-                    note
-                )
-            }) { Text("保存") }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消") }
-        }
-    )
 }

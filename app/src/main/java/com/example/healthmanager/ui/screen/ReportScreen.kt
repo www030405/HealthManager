@@ -50,7 +50,7 @@ fun ReportScreen(navController: NavController) {
     }
     val dayLabels = dates.map { it.substring(5) } // "MM-dd"
 
-    // 按日期聚合步数（仅统计数据库中的手动记录，不包括当天传感器实时步数）
+    // 按日期聚合步数（仅使用数据库中的归档记录）
     val stepsByDate = dates.map { date ->
         weekExercise.filter { it.date == date }.sumOf { it.steps }.toFloat()
     }
