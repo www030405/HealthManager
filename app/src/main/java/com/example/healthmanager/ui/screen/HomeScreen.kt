@@ -82,6 +82,14 @@ fun HomeScreen(navController: NavController) {
         sensorSteps > 0 -> sensorSteps
         else -> todaySteps
     }
+
+    // 目标值
+    val targetSteps = user?.targetSteps ?: 8000
+    val targetCalories = user?.targetCalories ?: 2000
+
+    // 达成率
+    val stepsProgress = ((displaySteps.toFloat() / targetSteps) * 100).coerceAtMost(100f).toInt()
+    val caloriesProgress = ((displayCalories / targetCalories) * 100).coerceAtMost(100f).toInt()
     val today = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy 年 M 月 d 日"))
 
     // 显示同步状态提示
@@ -187,7 +195,7 @@ fun HomeScreen(navController: NavController) {
                     value = "$displaySteps",
                     unit = "步",
                     icon = Icons.Default.DirectionsWalk,
-                    target = "${user?.targetSteps ?: 8000}"
+                    target = "$stepsProgress%"
                 )
                 SummaryCard(
                     modifier = Modifier.weight(1f),
@@ -195,7 +203,7 @@ fun HomeScreen(navController: NavController) {
                     value = String.format("%.0f", displayCalories),
                     unit = "kcal",
                     icon = Icons.Default.LocalFireDepartment,
-                    target = "目标达成"
+                    target = "$caloriesProgress%"
                 )
             }
 

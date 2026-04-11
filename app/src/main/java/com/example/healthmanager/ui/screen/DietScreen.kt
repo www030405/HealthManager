@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -37,6 +38,15 @@ fun DietScreen(navController: NavController) {
     val user by profileVm.currentUser.collectAsState()
 
     var showDialog by remember { mutableStateOf(false) }
+    var showFoodReference by remember { mutableStateOf(false) }
+
+    // 用于自动填入食物数据
+    var foodName by remember { mutableStateOf("") }
+    var foodAmount by remember { mutableStateOf("") }
+    var foodCalories by remember { mutableStateOf("") }
+    var foodProtein by remember { mutableStateOf("") }
+    var foodFat by remember { mutableStateOf("") }
+    var foodCarbs by remember { mutableStateOf("") }
 
     LaunchedEffect(saveResult) {
         if (saveResult != null) {
@@ -52,6 +62,11 @@ fun DietScreen(navController: NavController) {
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showFoodReference = true }) {
+                        Icon(Icons.Default.Restaurant, contentDescription = "食物参考")
                     }
                 }
             )
@@ -134,10 +149,54 @@ fun DietScreen(navController: NavController) {
 
     if (showDialog) {
         AddDietDialog(
-            onDismiss = { showDialog = false },
-            onConfirm = { mealType, foodName, amount, calories, protein, fat, carbs, note ->
-                viewModel.addRecord(mealType, foodName, amount, calories, protein, fat, carbs, note)
+            onDismiss = { 
                 showDialog = false
+                // 清空临时数据
+                foodName = ""
+                foodAmount = ""
+                foodCalories = ""
+                foodProtein = ""
+                foodFat = ""
+                foodCarbs = ""
+            },
+            onConfirm = { mealType, fName, amount, calories, protein, fat, carbs, note ->
+                viewModel.addRecord(mealType, fName, amount, calories, protein, fat, carbs, note)
+                showDialog = false
+            },
+            initialFoodName = foodName,
+            initialAmount = foodAmount,
+            initialCalories = foodCalories,
+            initialProtein = foodProtein,
+            initialFat = foodFat,
+            initialCarbs = foodCarbs
+        )
+    }
+
+    // 保存后清空临时数据
+    LaunchedEffect(showDialog) {
+        if (!showDialog && foodName.isNotEmpty()) {
+            foodName = ""
+            foodAmount = ""
+            foodCalories = ""
+            foodProtein = ""
+            foodFat = ""
+            foodCarbs = ""
+        }
+    }
+
+    if (showFoodReference) {
+        FoodReferenceDialog(
+            onDismiss = { showFoodReference = false },
+            onFoodSelected = { food ->
+                showFoodReference = false
+                // 自动填入到添加对话框并打开
+                foodName = food.name
+                foodAmount = food.amount
+                foodCalories = food.calories.toString()
+                foodProtein = food.protein.toString()
+                foodFat = food.fat.toString()
+                foodCarbs = food.carbs.toString()
+                showDialog = true
             }
         )
     }
@@ -171,16 +230,22 @@ private fun DietRecordItem(record: DietRecord, onDelete: () -> Unit) {
 @Composable
 private fun AddDietDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, String, Float, Float, Float, Float, Float, String) -> Unit
+    onConfirm: (String, String, Float, Float, Float, Float, Float, String) -> Unit,
+    initialFoodName: String = "",
+    initialAmount: String = "",
+    initialCalories: String = "",
+    initialProtein: String = "",
+    initialFat: String = "",
+    initialCarbs: String = ""
 ) {
     val mealTypes = listOf("早餐", "午餐", "晚餐", "加餐")
     var selectedMeal by remember { mutableStateOf("早餐") }
-    var foodName by remember { mutableStateOf("") }
-    var amount by remember { mutableStateOf("") }
-    var calories by remember { mutableStateOf("") }
-    var protein by remember { mutableStateOf("") }
-    var fat by remember { mutableStateOf("") }
-    var carbs by remember { mutableStateOf("") }
+    var foodName by remember { mutableStateOf(initialFoodName) }
+    var amount by remember { mutableStateOf(initialAmount) }
+    var calories by remember { mutableStateOf(initialCalories) }
+    var protein by remember { mutableStateOf(initialProtein) }
+    var fat by remember { mutableStateOf(initialFat) }
+    var carbs by remember { mutableStateOf(initialCarbs) }
     var note by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
 
@@ -250,5 +315,98 @@ private fun AddDietDialog(
             }) { Text("保存") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
+    )
+}
+
+// 常见食物参考数据（每100g）
+private val commonFoods = listOf(
+    FoodItem("米饭", "100g", 116, 2.6f, 0.3f, 25.9f),
+    FoodItem("面条", "100g", 109, 3.7f, 1.2f, 24.2f),
+    FoodItem("馒头", "100g", 223, 7.8f, 1.0f, 47.0f),
+    FoodItem("面包", "100g", 265, 9.0f, 3.2f, 49.0f),
+    FoodItem("鸡蛋", "1个(50g)", 72, 6.3f, 5.0f, 0.4f),
+    FoodItem("鸡胸肉", "100g", 165, 31.0f, 3.6f, 0f),
+    FoodItem("牛肉", "100g", 250, 26.0f, 15.0f, 0f),
+    FoodItem("鱼肉", "100g", 113, 20.0f, 2.6f, 0f),
+    FoodItem("牛奶", "100g", 54, 3.2f, 2.5f, 5.0f),
+    FoodItem("酸奶", "100g", 72, 3.3f, 2.5f, 9.3f),
+    FoodItem("苹果", "1个(180g)", 95, 0.3f, 0.2f, 25.1f),
+    FoodItem("香蕉", "1根(120g)", 105, 1.3f, 0.4f, 27.0f),
+    FoodItem("橙子", "1个(130g)", 62, 1.2f, 0.2f, 15.4f),
+    FoodItem("西瓜", "100g", 30, 0.6f, 0.1f, 7.6f),
+    FoodItem("草莓", "100g", 32, 0.7f, 0.3f, 7.7f),
+    FoodItem("胡萝卜", "100g", 41, 0.9f, 0.2f, 9.6f),
+    FoodItem("西兰花", "100g", 34, 2.8f, 0.4f, 6.6f),
+    FoodItem("番茄", "100g", 18, 0.9f, 0.2f, 3.9f),
+    FoodItem("土豆", "100g", 77, 2.0f, 0.1f, 17.5f),
+    FoodItem("豆腐", "100g", 76, 8.1f, 3.7f, 2.7f),
+    FoodItem("花生", "100g", 589, 26.0f, 50.0f, 16.0f),
+    FoodItem("核桃", "100g", 654, 15.0f, 65.0f, 14.0f),
+    FoodItem("可乐", "100g", 45, 0f, 0f, 11.3f),
+    FoodItem("奶茶", "100g", 67, 2.0f, 3.5f, 8.0f),
+)
+
+private data class FoodItem(
+    val name: String,
+    val amount: String,
+    val calories: Int,
+    val protein: Float,
+    val fat: Float,
+    val carbs: Float
+)
+
+@Composable
+private fun FoodReferenceDialog(
+    onDismiss: () -> Unit,
+    onFoodSelected: (FoodItem) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("常见食物参考", fontWeight = FontWeight.Bold) },
+        text = {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    Text(
+                        "点击食物可直接填入",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+                items(commonFoods) { food ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { onFoodSelected(food) }
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(food.name, fontWeight = FontWeight.Medium)
+                                Text(food.amount, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    "${food.calories} kcal",
+                                    color = MaterialTheme.colorScheme.primary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "蛋白质 ${food.protein}g | 脂肪 ${food.fat}g | 碳水 ${food.carbs}g",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
     )
 }
