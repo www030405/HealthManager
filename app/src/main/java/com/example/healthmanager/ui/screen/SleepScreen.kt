@@ -23,6 +23,15 @@ import com.example.healthmanager.ui.viewmodel.SleepViewModel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SleepScreen(navController: NavController) {
+    // 根据睡眠时长自动计算星级
+    fun calculateQuality(durationHours: Float): Int = when {
+        durationHours >= 7f -> 5
+        durationHours >= 6f -> 4
+        durationHours >= 5f -> 3
+        durationHours >= 4f -> 2
+        else -> 1
+    }
+
     val profileVm: ProfileViewModel = viewModel()
     val viewModel: SleepViewModel = viewModel()
     val userId = profileVm.prefs.currentUserId
@@ -102,11 +111,12 @@ fun SleepScreen(navController: NavController) {
                             }
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
+                                val autoQuality = calculateQuality(record.durationHours)
                                 Text("睡眠质量：", fontSize = 13.sp)
                                 repeat(5) { i ->
                                     Text(
-                                        if (i < record.quality) "★" else "☆",
-                                        color = if (i < record.quality)
+                                        if (i < autoQuality) "★" else "☆",
+                                        color = if (i < autoQuality)
                                             MaterialTheme.colorScheme.primary
                                         else MaterialTheme.colorScheme.outline,
                                         fontSize = 18.sp
@@ -187,6 +197,15 @@ fun SleepScreen(navController: NavController) {
 
 @Composable
 private fun SleepRecordItem(record: SleepRecord, onDelete: () -> Unit) {
+    // 根据睡眠时长自动计算星级
+    fun calculateQuality(durationHours: Float): Int = when {
+        durationHours >= 7f -> 5
+        durationHours >= 6f -> 4
+        durationHours >= 5f -> 3
+        durationHours >= 4f -> 2
+        else -> 1
+    }
+
     Card(modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -199,11 +218,12 @@ private fun SleepRecordItem(record: SleepRecord, onDelete: () -> Unit) {
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                val autoQuality = calculateQuality(record.durationHours)
                 Row {
                     repeat(5) { i ->
                         Text(
-                            if (i < record.quality) "★" else "☆",
-                            color = if (i < record.quality)
+                            if (i < autoQuality) "★" else "☆",
+                            color = if (i < autoQuality)
                                 MaterialTheme.colorScheme.primary
                             else MaterialTheme.colorScheme.outline,
                             fontSize = 14.sp
@@ -228,6 +248,29 @@ private fun AddSleepDialog(
     var wakeTime by remember { mutableStateOf("07:00") }
     var quality by remember { mutableIntStateOf(3) }
     var note by remember { mutableStateOf("") }
+
+    // 根据睡眠时长自动计算星级
+    fun calculateQuality(durationHours: Float): Int = when {
+        durationHours >= 7f -> 5
+        durationHours >= 6f -> 4
+        durationHours >= 5f -> 3
+        durationHours >= 4f -> 2
+        else -> 1
+    }
+
+    // 计算睡眠时长
+    fun calculateDuration(bed: String, wake: String): Float {
+        return try {
+            val bedParts = bed.split(":")
+            val wakeParts = wake.split(":")
+            val bedMinutes = bedParts[0].toInt() * 60 + bedParts[1].toInt()
+            val wakeMinutes = wakeParts[0].toInt() * 60 + wakeParts[1].toInt()
+            var duration = if (wakeMinutes >= bedMinutes) wakeMinutes - bedMinutes else (24 * 60 - bedMinutes + wakeMinutes)
+            duration / 60f
+        } catch (e: Exception) { 0f }
+    }
+
+    val autoQuality = calculateQuality(calculateDuration(bedTime, wakeTime))
     
     // 格式化时间输入的辅助函数
     fun formatTimeInput(input: String): String {
@@ -283,13 +326,22 @@ private fun AddSleepDialog(
                     singleLine = true,
                     placeholder = { Text("如：07:00") }
                 )
-                Text("睡眠质量：$quality 星", fontSize = 14.sp)
-                Slider(
-                    value = quality.toFloat(),
-                    onValueChange = { quality = it.toInt() },
-                    valueRange = 1f..5f,
-                    steps = 3
-                )
+                // 显示根据时长自动计算的星级
+                val currentDuration = calculateDuration(bedTime, wakeTime)
+                val currentQuality = calculateQuality(currentDuration)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("睡眠质量：", fontSize = 14.sp)
+                    repeat(5) { i ->
+                        Text(
+                            if (i < currentQuality) "★" else "☆",
+                            color = if (i < currentQuality)
+                                MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outline,
+                            fontSize = 20.sp
+                        )
+                    }
+                    Text(" (${String.format("%.1f", currentDuration)}h)", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 OutlinedTextField(
                     value = note,
                     onValueChange = { note = it },
@@ -302,10 +354,11 @@ private fun AddSleepDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    // 保存前自动格式化时间
+                    // 保存前自动格式化时间，使用自动计算的星级
                     val formattedBedTime = formatTimeInput(bedTime)
                     val formattedWakeTime = formatTimeInput(wakeTime)
-                    onConfirm(formattedBedTime, formattedWakeTime, quality, note)
+                    val finalQuality = calculateQuality(calculateDuration(formattedBedTime, formattedWakeTime))
+                    onConfirm(formattedBedTime, formattedWakeTime, finalQuality, note)
                 }
             ) { Text("保存") }
         },
