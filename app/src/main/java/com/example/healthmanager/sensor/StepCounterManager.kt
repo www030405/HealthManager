@@ -30,6 +30,7 @@ class StepCounterManager(context: Context) : SensorEventListener {
     private val KEY_INITIAL_STEPS = "initial_steps"
     private val KEY_LAST_TOTAL_STEPS = "last_total_steps"
     private val KEY_LAST_DATE = "last_date"
+    private val KEY_CURRENT_STEPS = "current_steps"  // 当前步数
 
     private val _steps = MutableStateFlow(0)
     val steps: StateFlow<Int> = _steps
@@ -70,6 +71,7 @@ class StepCounterManager(context: Context) : SensorEventListener {
         val savedInitialSteps = prefs.getLong(KEY_INITIAL_STEPS, -1L)
         val lastTotalSteps = prefs.getLong(KEY_LAST_TOTAL_STEPS, -1L)
         val lastDate = prefs.getString(KEY_LAST_DATE, null)
+        val savedCurrentSteps = prefs.getInt(KEY_CURRENT_STEPS, 0)
 
         val todayStr = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
         val isSameDay = lastDate == todayStr
@@ -77,7 +79,7 @@ class StepCounterManager(context: Context) : SensorEventListener {
         if (savedInitialSteps >= 0 && lastTotalSteps >= 0 && isSameDay) {
             // 同一天，恢复之前的基准值和相对步数
             initialSteps = savedInitialSteps
-            _steps.value = (lastTotalSteps - savedInitialSteps).toInt()
+            _steps.value = savedCurrentSteps
             lastUpdateStepCount = _steps.value
             Log.d("StepCounter", "恢复之前的基准值：$initialSteps, 当前步数：${_steps.value}")
         } else {
@@ -99,8 +101,9 @@ class StepCounterManager(context: Context) : SensorEventListener {
                 putLong(KEY_INITIAL_STEPS, initialSteps)
                 putLong(KEY_LAST_TOTAL_STEPS, initialSteps + _steps.value)
                 putString(KEY_LAST_DATE, LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE))
+                putInt(KEY_CURRENT_STEPS, _steps.value)  // 保存当前步数
             }.apply()
-            Log.d("StepCounter", "保存状态：基准值=$initialSteps, 相对步数=${_steps.value}")
+            Log.d("StepCounter", "保存状态：基准值=$initialSteps, 当前步数=${_steps.value}")
         }
     }
 

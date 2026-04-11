@@ -1,5 +1,6 @@
 package com.example.healthmanager.ui.screen
 
+import android.content.Context
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -10,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -17,6 +19,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.healthmanager.ui.viewmodel.ExerciseViewModel
+import com.example.healthmanager.ui.viewmodel.HealthConnectViewModel
 import com.example.healthmanager.ui.viewmodel.ProfileViewModel
 import com.example.healthmanager.ui.viewmodel.SleepViewModel
 import com.github.mikephil.charting.charts.BarChart
@@ -33,26 +36,66 @@ fun ReportScreen(navController: NavController) {
     val profileVm: ProfileViewModel = viewModel()
     val exerciseVm: ExerciseViewModel = viewModel()
     val sleepVm: SleepViewModel = viewModel()
+    val hcVm: HealthConnectViewModel = viewModel()
+    val context = LocalContext.current
     val userId = profileVm.prefs.currentUserId
 
+    // 确保传感器启动
     LaunchedEffect(userId) {
         exerciseVm.init(userId)
         sleepVm.init(userId)
+        hcVm.checkPermissions()
     }
 
-    val weekExercise by exerciseVm.weekRecords.collectAsState()
-    val weekSleep by sleepVm.weekRecords.collectAsState()
-    val avgSleep by sleepVm.avgDuration.collectAsState()
+    // 同步 Health Connect 数据
+    LaunchedEffect(Unit) {
+        if (hcVm.permissionGranted.value) {
+            hcVm.syncTodaySteps()
+        }
+    }
+
+    // 获取步数数据
+    val sensorSteps by exerciseVm.sensorSteps.collectAsState()
+    val hcSteps by hcVm.todayStepsFromHC.collectAsState()
+    val hcPermission by hcVm.permissionGranted.collectAsState()
+    val todaySteps by exerciseVm.todaySteps.collectAsState()
+
+    // 从 SharedPreferences 直接读取传感器步数（确保一致性）
+    val prefs = context.getSharedPreferences("step_counter_prefs", Context.MODE_PRIVATE)
+    val savedSteps = prefs.getInt("current_steps", 0)
 
     // 近7天日期标签
     val dates = (6 downTo 0).map {
         LocalDate.now().minusDays(it.toLong()).format(DateTimeFormatter.ISO_LOCAL_DATE)
     }
-    val dayLabels = dates.map { it.substring(5) } // "MM-dd"
+    val dayLabels = dates.map { it.substring(5) }
 
-    // 按日期聚合步数（仅使用数据库中的归档记录）
-    val stepsByDate = dates.map { date ->
-        weekExercise.filter { it.date == date }.sumOf { it.steps }.toFloat()
+    val todayDate = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+
+    val weekExercise by exerciseVm.weekRecords.collectAsState()
+    val weekSleep by sleepVm.weekRecords.collectAsState()
+    val avgSleep by sleepVm.avgDuration.collectAsState()
+
+    // 今日步数（优先使用传感器实时数据 > SharedPreferences > HC > 数据库）
+    val displayTodaySteps = when {
+        sensorSteps > 0 -> sensorSteps
+        savedSteps > 0 -> savedSteps
+        hcPermission && hcSteps > 0 -> hcSteps.toInt()
+        else -> todaySteps
+    }
+
+    // 按日期聚合步数：历史日期使用数据库归档记录，今天使用实时步数
+    val stepsByDate = dates.mapIndexed { index, date ->
+        if (date == todayDate) {
+            when {
+                sensorSteps > 0 -> sensorSteps.toFloat()
+                savedSteps > 0 -> savedSteps.toFloat()
+                hcPermission && hcSteps > 0 -> hcSteps.toFloat()
+                else -> todaySteps.toFloat()
+            }
+        } else {
+            weekExercise.filter { it.date == date }.sumOf { it.steps }.toFloat()
+        }
     }
 
     // 按日期聚合睡眠时长
@@ -82,6 +125,7 @@ fun ReportScreen(navController: NavController) {
         ) {
             // 本周统计概览
             WeekSummaryCard(
+                todaySteps = displayTodaySteps,
                 totalSteps = stepsByDate.sum().toInt(),
                 activeDays = weekExercise.groupBy { it.date }.size,
                 avgSleep = avgSleep
@@ -125,7 +169,7 @@ fun ReportScreen(navController: NavController) {
 }
 
 @Composable
-private fun WeekSummaryCard(totalSteps: Int, activeDays: Int, avgSleep: Float) {
+private fun WeekSummaryCard(todaySteps: Int, totalSteps: Int, activeDays: Int, avgSleep: Float) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -137,9 +181,22 @@ private fun WeekSummaryCard(totalSteps: Int, activeDays: Int, avgSleep: Float) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceAround
             ) {
+                SummaryStatItem("今日步数", "$todaySteps", "步")
                 SummaryStatItem("总步数", "$totalSteps", "步")
-                SummaryStatItem("运动天数", "$activeDays", "天")
                 SummaryStatItem("平均睡眠", String.format("%.1f", avgSleep), "小时")
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center
+            ) {
+                val target = 8000
+                val progress = (todaySteps.toFloat() / target * 100).coerceAtMost(100f)
+                Text(
+                    text = "今日目标完成率: ${progress.toInt()}%",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }
