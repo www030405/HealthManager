@@ -12,7 +12,9 @@ import com.example.healthmanager.data.repository.ExerciseRepository
 import com.example.healthmanager.data.repository.SleepRepository
 import com.example.healthmanager.health.HealthScore
 import com.example.healthmanager.health.HealthScoreEngine
+import com.example.healthmanager.sensor.StepCounterManager
 import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -21,6 +23,7 @@ import java.time.format.DateTimeFormatter
  *
  * 聚合运动、睡眠、饮食三个维度的数据，
  * 通过 HealthScoreEngine 计算多维度健康评分。
+ * 运动步数使用传感器实时数据（实时更新）。
  */
 class HealthScoreViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -29,12 +32,25 @@ class HealthScoreViewModel(application: Application) : AndroidViewModel(applicat
     private val sleepRepo = SleepRepository(db.sleepDao())
     private val dietRepo = DietRepository(db.dietDao())
 
+    // 传感器实时步数（实时更新）
+    private val stepCounter = StepCounterManager(application)
+    val sensorSteps: StateFlow<Int> = stepCounter.steps
+
     private val _userId = MutableStateFlow(0)
     private val _targetSteps = MutableStateFlow(8000)
     private val _targetCalories = MutableStateFlow(2000)
 
     private val today = todayStr()
     private val sevenDaysAgo = sevenDaysAgoStr()
+
+    init {
+        stepCounter.start()
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stepCounter.stop()
+    }
 
     // ── 运动聚合数据 ──
     private data class ExerciseData(
@@ -90,17 +106,22 @@ class HealthScoreViewModel(application: Application) : AndroidViewModel(applicat
 
     /**
      * 综合健康评分（实时响应数据变化）
+     * 运动步数使用传感器实时数据（实时更新）
      */
     val healthScore: StateFlow<HealthScore> = combine(
+        sensorSteps,  // 实时传感器步数
         exerciseData,
         todaySleep,
         dietData
-    ) { exercise, sleep, diet ->
+    ) { sensorStepsVal, exercise, sleep, diet ->
         val targetSteps = _targetSteps.value
         val targetCalories = _targetCalories.value
 
+        // 优先使用传感器实时步数，否则使用数据库记录
+        val todaySteps = if (sensorStepsVal > 0) sensorStepsVal else exercise.todaySteps
+
         val exerciseScore = HealthScoreEngine.calculateExerciseScore(
-            todaySteps = exercise.todaySteps,
+            todaySteps = todaySteps,
             targetSteps = targetSteps,
             todayExerciseMinutes = exercise.todayMinutes,
             weekActiveDays = exercise.weekActiveDays

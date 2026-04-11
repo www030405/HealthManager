@@ -1,22 +1,32 @@
 package com.example.healthmanager.ui.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.healthmanager.data.database.HealthDatabase
 import com.example.healthmanager.data.entity.SleepRecord
 import com.example.healthmanager.data.repository.SleepRepository
+import com.example.healthmanager.healthconnect.HealthConnectManager
+import com.example.healthmanager.healthconnect.HealthConnectManager.Companion.isAvailable
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.Duration
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 class SleepViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = HealthDatabase.getDatabase(application)
     private val repo = SleepRepository(db.sleepDao())
+
+    // Health Connect 管理器
+    private val hcManager = if (isAvailable(application)) {
+        HealthConnectManager(application)
+    } else null
 
     private val _userId = MutableStateFlow(0)
     private val _selectedDate = MutableStateFlow(todayStr())
@@ -115,6 +125,46 @@ class SleepViewModel(application: Application) : AndroidViewModel(application) {
                 )
             )
             _saveResult.value = "睡眠记录已保存 (${String.format("%.1f", durationHours)}小时)"
+
+            // 同步到 Health Connect
+            syncToHealthConnect(bedTime, wakeTime, note)
+        }
+    }
+
+    /**
+     * 同步睡眠记录到 Health Connect
+     */
+    private fun syncToHealthConnect(bedTime: String, wakeTime: String, note: String) {
+        viewModelScope.launch {
+            try {
+                hcManager?.let { manager ->
+                    // 检查权限
+                    val hasPermissions = manager.hasAllPermissions()
+                    Log.d("SleepViewModel", "HC权限: $hasPermissions")
+                    if (!hasPermissions) return@launch
+
+                    // 解析入睡和起床时间
+                    val bed = LocalTime.parse(bedTime, DateTimeFormatter.ofPattern("HH:mm"))
+                    val wake = LocalTime.parse(wakeTime, DateTimeFormatter.ofPattern("HH:mm"))
+
+                    // 计算日期（入睡时间可能在前一天）
+                    val today = LocalDate.now()
+                    val bedDate = if (bed.isAfter(wake)) today.minusDays(1) else today
+
+                    val startTime = bedDate.atTime(bed).atZone(ZoneId.systemDefault()).toInstant()
+                    val endTime = today.atTime(wake).atZone(ZoneId.systemDefault()).toInstant()
+
+                    Log.d("SleepViewModel", "写入HC睡眠: $bedDate $bedTime -> $today $wakeTime")
+
+                    // 写入 Health Connect
+                    manager.writeSleep(startTime, endTime, note)
+                    Log.d("SleepViewModel", "HC睡眠写入成功")
+                } ?: run {
+                    Log.d("SleepViewModel", "HC未安装或不可用")
+                }
+            } catch (e: Exception) {
+                Log.e("SleepViewModel", "HC同步失败: ${e.message}")
+            }
         }
     }
 
