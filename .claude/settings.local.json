@@ -17,7 +17,13 @@
       "Bash(./gradlew dependencyInsight --dependency litert --configuration debugRuntimeClasspath)",
       "WebSearch",
       "WebFetch(domain:mvnrepository.com)",
-      "WebFetch(domain:ai.google.dev)"
+      "WebFetch(domain:ai.google.dev)",
+      "Bash(find C:WuhaoranGraduateEssayAndroidStudioProjectsHealthManagerappsrcmainjavacomexamplehealthmanager -type f -name *.kt -o -name *.java)",
+      "Bash(find C:WuhaoranGraduateEssay -maxdepth 3 -type f \\\\\\(-iname *开题* -o -iname *thesis* -o -iname *proposal* \\\\\\))",
+      "Bash(find C:WuhaoranGraduateEssayAndroidStudioProjectsHealthManagerappsrcmainres -type f \\\\\\(-name *.xml -o -name *.json \\\\\\))",
+      "Bash(grep -E \"\\\\.\\(doc|docx|pdf|md|txt\\)$\")",
+      "Bash(find C:Userslenovo -maxdepth 3 -name *开题* -type f)",
+      "Bash(find C:WuhaoranGraduateEssay -name *.doc -o -name *.docx -o -name *.pdf)"
     ]
   }
 }

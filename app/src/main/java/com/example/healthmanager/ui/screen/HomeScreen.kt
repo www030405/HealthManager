@@ -20,8 +20,10 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.healthmanager.healthconnect.HealthConnectManager
 import com.example.healthmanager.navigation.Screen
+import com.example.healthmanager.health.HealthScore
 import com.example.healthmanager.ui.viewmodel.ExerciseViewModel
 import com.example.healthmanager.ui.viewmodel.HealthConnectViewModel
+import com.example.healthmanager.ui.viewmodel.HealthScoreViewModel
 import com.example.healthmanager.ui.viewmodel.ProfileViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -32,6 +34,7 @@ fun HomeScreen(navController: NavController) {
     val profileVm: ProfileViewModel = viewModel()
     val exerciseVm: ExerciseViewModel = viewModel()
     val hcVm: HealthConnectViewModel = viewModel()
+    val scoreVm: HealthScoreViewModel = viewModel()
     val user by profileVm.currentUser.collectAsState()
     val userId = profileVm.prefs.currentUserId
     val context = LocalContext.current
@@ -40,6 +43,17 @@ fun HomeScreen(navController: NavController) {
         exerciseVm.init(userId)
         hcVm.checkPermissions()
     }
+
+    // 健康评分初始化（依赖用户目标数据）
+    LaunchedEffect(user) {
+        scoreVm.init(
+            userId = userId,
+            targetSteps = user?.targetSteps ?: 8000,
+            targetCalories = user?.targetCalories ?: 2000
+        )
+    }
+
+    val healthScore by scoreVm.healthScore.collectAsState()
 
     // Health Connect 权限请求启动器
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -185,6 +199,9 @@ fun HomeScreen(navController: NavController) {
                 )
             }
 
+            // 健康评分卡片
+            HealthScoreCard(healthScore = healthScore)
+
             // 功能入口
             Text("功能模块", fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
 
@@ -328,5 +345,101 @@ private fun FeatureCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+@Composable
+private fun HealthScoreCard(healthScore: HealthScore) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            Text(
+                text = "今日健康评分",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 总分 + 等级
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = String.format("%.0f", healthScore.totalScore),
+                    fontSize = 48.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column {
+                    Text(
+                        text = "${healthScore.level.emoji} ${healthScore.level.label}",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Text(
+                        text = "运动·睡眠·饮食 加权评估",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // 三维度得分条
+            ScoreDimensionBar("运动", healthScore.exerciseScore, MaterialTheme.colorScheme.primary)
+            Spacer(modifier = Modifier.height(8.dp))
+            ScoreDimensionBar("睡眠", healthScore.sleepScore, MaterialTheme.colorScheme.secondary)
+            Spacer(modifier = Modifier.height(8.dp))
+            ScoreDimensionBar("饮食", healthScore.dietScore, MaterialTheme.colorScheme.tertiary)
+        }
+    }
+}
+
+@Composable
+private fun ScoreDimensionBar(
+    label: String,
+    score: Float,
+    color: androidx.compose.ui.graphics.Color
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            modifier = Modifier.width(36.dp),
+            color = MaterialTheme.colorScheme.onTertiaryContainer
+        )
+        LinearProgressIndicator(
+            progress = { (score / 100f).coerceIn(0f, 1f) },
+            modifier = Modifier
+                .weight(1f)
+                .height(8.dp),
+            color = color,
+            trackColor = color.copy(alpha = 0.2f),
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = String.format("%.0f", score),
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(30.dp),
+            color = MaterialTheme.colorScheme.onTertiaryContainer
+        )
     }
 }

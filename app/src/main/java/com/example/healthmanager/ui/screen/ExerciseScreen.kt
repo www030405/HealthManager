@@ -36,6 +36,7 @@ fun ExerciseScreen(navController: NavController) {
     val sessionSeconds by viewModel.sessionSeconds.collectAsState()
     val sessionSteps by viewModel.sessionSteps.collectAsState()
     val sessionCalories by viewModel.sessionCalories.collectAsState()
+    val sessionDistance by viewModel.sessionDistance.collectAsState()
     val todayCalories by viewModel.todayCalories.collectAsState()
     val todaySteps by viewModel.todaySteps.collectAsState()
     val records by viewModel.todayRecords.collectAsState()
@@ -111,6 +112,7 @@ fun ExerciseScreen(navController: NavController) {
                         sessionSeconds = sessionSeconds,
                         sessionSteps = sessionSteps,
                         sessionCalories = sessionCalories,
+                        sessionDistance = sessionDistance,
                         onStart = { viewModel.startExercise() },
                         onStop = { viewModel.stopExercise() }
                     )
@@ -321,6 +323,7 @@ private fun ExerciseSessionPanel(
     sessionSeconds: Long,
     sessionSteps: Int,
     sessionCalories: Float,
+    sessionDistance: Float,
     onStart: () -> Unit,
     onStop: () -> Unit
 ) {
@@ -364,8 +367,11 @@ private fun ExerciseSessionPanel(
                         SessionMetric(label = "步数", value = "$sessionSteps", unit = "步")
                     }
                     ExerciseType.CYCLING, ExerciseType.SWIMMING -> {
-                        val distance = sessionSteps * 0.7f / 1000f
-                        SessionMetric(label = "距离", value = String.format("%.2f", distance), unit = "km")
+                        SessionMetric(
+                            label = "距离",
+                            value = String.format("%.2f", sessionDistance),
+                            unit = "km"
+                        )
                     }
                     else -> {}
                 }
@@ -448,7 +454,11 @@ private fun TodaySummaryCard(totalSteps: Int, totalCalories: Float, exerciseType
             horizontalArrangement = Arrangement.SpaceAround
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("步数", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    if (isDistanceType) "距离" else "步数",
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Text(displayValue, fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text(unit, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

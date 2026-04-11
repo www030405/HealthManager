@@ -65,6 +65,10 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
     private val _sessionSteps = MutableStateFlow(0)
     val sessionSteps: StateFlow<Int> = _sessionSteps
 
+    // 骑行/游泳的距离（km），用户手动输入
+    private val _sessionDistance = MutableStateFlow(0f)
+    val sessionDistance: StateFlow<Float> = _sessionDistance
+
     val sessionCalories: StateFlow<Float> =
         combine(_sessionSteps, _sessionSeconds, _selectedType, userWeight) { steps, seconds, type, weight ->
             if (type.needsSteps) {
@@ -141,8 +145,14 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
             _selectedType.value = type
             _sessionSeconds.value = 0L
             _sessionSteps.value = 0
+            _sessionDistance.value = 0f
             sessionStartSensorSteps = 0
         }
+    }
+
+    /** 设置骑行/游泳距离（km） */
+    fun setDistance(km: Float) {
+        _sessionDistance.value = km
     }
 
     fun startExercise() {
@@ -152,6 +162,7 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
         _isExercising.value = true
         _sessionSeconds.value = 0L
         _sessionSteps.value = 0
+        _sessionDistance.value = 0f
         sessionStartSensorSteps = sensorSteps.value
 
         timerJob = viewModelScope.launch {
@@ -204,7 +215,7 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
         val distanceKm = if (type.needsSteps) {
             steps * 0.7f / 1000f
         } else {
-            0f
+            _sessionDistance.value
         }
 
         viewModelScope.launch {
