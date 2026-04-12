@@ -9,6 +9,7 @@ import com.example.healthmanager.data.entity.ExerciseRecord
 import com.example.healthmanager.data.repository.ExerciseRepository
 import com.example.healthmanager.ml.GaitClassifier
 import com.example.healthmanager.ml.GaitResult
+import com.example.healthmanager.sensor.LocationTracker
 import com.example.healthmanager.sensor.StepCounterManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -41,6 +42,11 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
     private val gaitClassifier = GaitClassifier(application)
     val gaitResult: StateFlow<GaitResult?> = gaitClassifier.gaitResult
     val usingCnn: StateFlow<Boolean> = gaitClassifier.usingCnn
+
+    // GPS 定位追踪（骑行/游泳距离）
+    private val locationTracker = LocationTracker(application)
+    val gpsDistance: StateFlow<Float> = locationTracker.distanceKm
+    val isGpsTracking: StateFlow<Boolean> = locationTracker.isTracking
 
     private val _userId = MutableStateFlow(0)
 
@@ -161,36 +167,40 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
     fun startExercise() {
         val currentType = _selectedType.value
         if (_isExercising.value || currentType == ExerciseType.ALL) return
-        
+
         _isExercising.value = true
         _sessionSeconds.value = 0L
         _sessionSteps.value = 0
         _sessionDistance.value = 0f
         sessionStartSensorSteps = sensorSteps.value
 
+        // 骑行/游泳：启动 GPS 追踪距离
+        if (!currentType.needsSteps) {
+            locationTracker.startTracking()
+        }
+
         timerJob = viewModelScope.launch {
             while (_isExercising.value) {
                 delay(1000)
                 _sessionSeconds.value += 1
-                
+
                 if (currentType.needsSteps) {
                     val detectedGait = gaitClassifier.gaitResult.value
                     val detectedClass = detectedGait?.classIndex ?: 0
-                    
+
                     val shouldCountSteps = when (currentType) {
-                        // 走路模式：步行、跑步、上楼梯都可以增加步数
                         ExerciseType.WALKING -> detectedClass in 1..3
-                        // 跑步模式：只有跑步可以增加步数
                         ExerciseType.RUNNING -> detectedClass == 2
-                        // 上楼梯模式：只有上楼梯可以增加步数
                         ExerciseType.STAIR_CLIMBING -> detectedClass == 3
                         else -> false
                     }
-                    
+
                     if (shouldCountSteps) {
                         _sessionSteps.value = sensorSteps.value - sessionStartSensorSteps
                     }
-                    Log.d("Exercise", "步态检测: ${detectedGait?.label}, 步数: ${_sessionSteps.value}")
+                } else {
+                    // 骑行/游泳：实时更新 GPS 距离
+                    _sessionDistance.value = locationTracker.distanceKm.value
                 }
             }
         }
@@ -204,6 +214,13 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
         timerJob = null
 
         val type = _selectedType.value
+
+        // 骑行/游泳：停止 GPS 追踪，获取最终距离
+        if (!type.needsSteps) {
+            val finalDistance = locationTracker.stopTracking()
+            _sessionDistance.value = finalDistance
+        }
+
         val seconds = _sessionSeconds.value
         val durationMinutes = (seconds / 60).toInt()
         val steps = if (type.needsSteps) _sessionSteps.value else 0
@@ -292,6 +309,7 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
             stopExercise()
         }
         timerJob?.cancel()
+        locationTracker.stopTracking()
         stepCounter.stop()
         gaitClassifier.release()
     }

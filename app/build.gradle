@@ -84,6 +84,9 @@ dependencies {
     // LiteRT（原 TensorFlow Lite，1D CNN 步态分类）
     implementation libs.litert
 
+    // GPS 定位（骑行/游泳距离追踪）
+    implementation libs.play.services.location
+
     // 图表
     implementation libs.mpandroidchart
 

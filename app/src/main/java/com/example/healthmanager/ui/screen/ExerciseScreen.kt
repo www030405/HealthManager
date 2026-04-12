@@ -13,6 +13,12 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.healthmanager.data.entity.ExerciseRecord
@@ -29,7 +35,18 @@ fun ExerciseScreen(navController: NavController) {
     val viewModel: ExerciseViewModel = viewModel()
     val userId = profileVm.prefs.currentUserId
 
+    val context = LocalContext.current
+
     LaunchedEffect(userId) { viewModel.init(userId) }
+
+    // GPS 定位权限请求
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            viewModel.startExercise()
+        }
+    }
 
     val selectedType by viewModel.selectedType.collectAsState()
     val isExercising by viewModel.isExercising.collectAsState()
@@ -113,7 +130,21 @@ fun ExerciseScreen(navController: NavController) {
                         sessionSteps = sessionSteps,
                         sessionCalories = sessionCalories,
                         sessionDistance = sessionDistance,
-                        onStart = { viewModel.startExercise() },
+                        onStart = {
+                            if (!selectedType.needsSteps && selectedType != ExerciseType.ALL) {
+                                // 骑行/游泳需要 GPS 定位权限
+                                val hasPermission = ContextCompat.checkSelfPermission(
+                                    context, Manifest.permission.ACCESS_FINE_LOCATION
+                                ) == PackageManager.PERMISSION_GRANTED
+                                if (hasPermission) {
+                                    viewModel.startExercise()
+                                } else {
+                                    locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                                }
+                            } else {
+                                viewModel.startExercise()
+                            }
+                        },
                         onStop = { viewModel.stopExercise() }
                     )
                 }
