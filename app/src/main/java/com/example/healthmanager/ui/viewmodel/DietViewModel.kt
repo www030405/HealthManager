@@ -1,20 +1,30 @@
 package com.example.healthmanager.ui.viewmodel
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.healthmanager.data.database.HealthDatabase
 import com.example.healthmanager.data.entity.DietRecord
 import com.example.healthmanager.data.repository.DietRepository
+import com.example.healthmanager.healthconnect.HealthConnectManager
+import com.example.healthmanager.healthconnect.HealthConnectManager.Companion.isAvailable
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 class DietViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = HealthDatabase.getDatabase(application)
     private val repo = DietRepository(db.dietDao())
+
+    // Health Connect 管理器
+    private val hcManager = if (isAvailable(application)) {
+        HealthConnectManager(application)
+    } else null
 
     private val _userId = MutableStateFlow(0)
     private val _selectedDate = MutableStateFlow(todayStr())
@@ -76,6 +86,55 @@ class DietViewModel(application: Application) : AndroidViewModel(application) {
                 )
             )
             _saveResult.value = "饮食记录已保存"
+
+            // 同步到 Health Connect
+            syncToHealthConnect(mealType, foodName, calories, protein, fat, carbohydrates)
+        }
+    }
+
+    /**
+     * 同步饮食记录到 Health Connect
+     */
+    private fun syncToHealthConnect(
+        mealType: String,
+        foodName: String,
+        calories: Float,
+        protein: Float,
+        fat: Float,
+        carbohydrates: Float
+    ) {
+        viewModelScope.launch {
+            try {
+                hcManager?.let { manager ->
+                    val hasPermissions = manager.hasAllPermissions()
+                    Log.d("DietViewModel", "HC权限: $hasPermissions")
+                    if (!hasPermissions) return@launch
+
+                    val now = Instant.now()
+                    val mealTypeInt = when (mealType) {
+                        "早餐" -> 1  // MEAL_TYPE_BREAKFAST
+                        "午餐" -> 2  // MEAL_TYPE_LUNCH
+                        "晚餐" -> 3  // MEAL_TYPE_DINNER
+                        "加餐" -> 4  // MEAL_TYPE_SNACK
+                        else -> 1
+                    }
+
+                    manager.writeNutrition(
+                        mealName = foodName,
+                        calories = calories.toDouble(),
+                        protein = protein.toDouble(),
+                        fat = fat.toDouble(),
+                        carbs = carbohydrates.toDouble(),
+                        mealType = mealTypeInt,
+                        time = now
+                    )
+                    Log.d("DietViewModel", "HC饮食写入成功: $foodName")
+                } ?: run {
+                    Log.d("DietViewModel", "HC未安装")
+                }
+            } catch (e: Exception) {
+                Log.e("DietViewModel", "HC同步失败: ${e.message}")
+            }
         }
     }
 

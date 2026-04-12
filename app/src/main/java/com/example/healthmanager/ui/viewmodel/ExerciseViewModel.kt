@@ -34,6 +34,9 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
     private val stepCounter = StepCounterManager(application)
     val sensorSteps: StateFlow<Int> = stepCounter.steps
     val isSensorAvailable: Boolean = stepCounter.isAvailable
+    val isSedentary: StateFlow<Boolean> = stepCounter.isSedentary
+
+    fun dismissSedentary() = stepCounter.dismissSedentary()
 
     private val gaitClassifier = GaitClassifier(application)
     val gaitResult: StateFlow<GaitResult?> = gaitClassifier.gaitResult

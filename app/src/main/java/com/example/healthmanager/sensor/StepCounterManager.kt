@@ -12,6 +12,8 @@ import com.example.healthmanager.data.entity.ExerciseRecord
 import com.example.healthmanager.data.repository.UserPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -49,8 +51,32 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
 
     private val archiveScope = CoroutineScope(Dispatchers.IO)
 
+    // ── 久坐检测 ──
+    companion object {
+        const val SEDENTARY_THRESHOLD_MS = 30 * 60 * 1000L  // 30分钟无步数变化视为久坐
+    }
+
+    /** 上次步数变化的时间戳 */
+    private var lastStepChangeTime = System.currentTimeMillis()
+
+    /** 久坐状态：true 表示已超过阈值未检测到步数变化 */
+    private val _isSedentary = MutableStateFlow(false)
+    val isSedentary: StateFlow<Boolean> = _isSedentary
+
+    /** 久坐提醒已被用户dismiss后，在下次走动前不再弹出 */
+    private var sedentaryDismissed = false
+
+    /** 用户关闭了久坐提醒弹窗 */
+    fun dismissSedentary() {
+        sedentaryDismissed = true
+        _isSedentary.value = false
+    }
+
+    private var sedentaryCheckJob: Job? = null
+
     fun start() {
         restoreInitialSteps()
+        lastStepChangeTime = System.currentTimeMillis()
 
         stepSensor?.let {
             sensorManager.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST)
@@ -58,10 +84,24 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
         } ?: run {
             Log.e("StepCounter", "设备不支持计步传感器")
         }
+
+        // 启动久坐检测定时检查（每分钟检查一次）
+        sedentaryCheckJob?.cancel()
+        sedentaryCheckJob = archiveScope.launch {
+            while (true) {
+                delay(60_000) // 每60秒检查一次
+                val elapsed = System.currentTimeMillis() - lastStepChangeTime
+                if (elapsed >= SEDENTARY_THRESHOLD_MS && !sedentaryDismissed) {
+                    _isSedentary.value = true
+                    Log.d("StepCounter", "久坐提醒：已 ${elapsed / 60000} 分钟未活动")
+                }
+            }
+        }
     }
 
     fun stop() {
         sensorManager.unregisterListener(this)
+        sedentaryCheckJob?.cancel()
         saveCurrentState()
         Log.d("StepCounter", "传感器已停止")
     }
@@ -175,6 +215,11 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
                 lastUpdateStepCount = currentSteps
                 _steps.value = currentSteps
                 saveCurrentState()
+
+                // 步数变化 → 重置久坐状态
+                lastStepChangeTime = System.currentTimeMillis()
+                _isSedentary.value = false
+                sedentaryDismissed = false
             }
         }
     }

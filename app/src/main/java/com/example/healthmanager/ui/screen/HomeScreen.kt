@@ -55,6 +55,9 @@ fun HomeScreen(navController: NavController) {
 
     val healthScore by scoreVm.healthScore.collectAsState()
 
+    // 久坐检测
+    val isSedentary by exerciseVm.isSedentary.collectAsState()
+
     // Health Connect 权限请求启动器
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = hcVm.getPermissionContract(),
@@ -270,6 +273,40 @@ fun HomeScreen(navController: NavController) {
                 )
             }
         }
+    }
+
+    // 久坐提醒弹窗
+    if (isSedentary) {
+        AlertDialog(
+            onDismissRequest = { exerciseVm.dismissSedentary() },
+            icon = {
+                Icon(
+                    Icons.Default.DirectionsWalk,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(48.dp)
+                )
+            },
+            title = { Text("久坐提醒") },
+            text = {
+                Text("您已经超过30分钟没有活动了，建议起身走动一下，活动身体有助于保持健康！")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        exerciseVm.dismissSedentary()
+                        navController.navigate(Screen.Exercise.route)
+                    }
+                ) {
+                    Text("去运动")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { exerciseVm.dismissSedentary() }) {
+                    Text("知道了")
+                }
+            }
+        )
     }
 }
 
