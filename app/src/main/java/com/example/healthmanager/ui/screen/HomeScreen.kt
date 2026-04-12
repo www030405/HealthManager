@@ -113,6 +113,28 @@ fun HomeScreen(navController: NavController) {
                     }
                 }
             )
+        },
+        bottomBar = {
+            NavigationBar {
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Home, contentDescription = "首页") },
+                    label = { Text("首页") },
+                    selected = true,
+                    onClick = { }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Article, contentDescription = "资讯") },
+                    label = { Text("资讯") },
+                    selected = false,
+                    onClick = { navController.navigate(Screen.News.route) }
+                )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Default.Person, contentDescription = "我的") },
+                    label = { Text("我的") },
+                    selected = false,
+                    onClick = { navController.navigate(Screen.Profile.route) }
+                )
+            }
         }
     ) { padding ->
         Column(

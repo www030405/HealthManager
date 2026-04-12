@@ -48,5 +48,9 @@ fun NavGraph(
         composable(Screen.Profile.route) {
             ProfileScreen(navController = navController)
         }
+
+        composable(Screen.News.route) {
+            NewsScreen(navController = navController)
+        }
     }
 }
