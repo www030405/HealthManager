@@ -49,7 +49,7 @@ fun NavGraph(
             ProfileScreen(navController = navController)
         }
 
-        composable(Screen.News.route) {
+        composable(Screen.Assistant.route) {
             NewsScreen(navController = navController)
         }
     }

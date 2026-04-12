@@ -12,7 +12,7 @@ sealed class Screen(val route: String) {
     object Sleep : Screen("sleep")
     object Report : Screen("report")
     object Profile : Screen("profile")
-    object News : Screen("news")
-    object NewsTab : Screen("news_tab")
+    object Assistant : Screen("assistant")
+    object AssistantTab : Screen("assistant_tab")
     object HomeTab : Screen("home_tab")
 }

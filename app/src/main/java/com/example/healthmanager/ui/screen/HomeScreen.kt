@@ -126,10 +126,10 @@ fun HomeScreen(navController: NavController) {
                     onClick = { }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.Article, contentDescription = "资讯") },
-                    label = { Text("资讯") },
+                    icon = { Icon(Icons.Default.Forum, contentDescription = "助手") },
+                    label = { Text("助手") },
                     selected = false,
-                    onClick = { navController.navigate(Screen.News.route) }
+                    onClick = { navController.navigate(Screen.Assistant.route) }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Person, contentDescription = "我的") },

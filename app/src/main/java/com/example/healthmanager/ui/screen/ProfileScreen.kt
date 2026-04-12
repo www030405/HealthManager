@@ -9,6 +9,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -67,10 +68,10 @@ fun ProfileScreen(navController: NavController) {
                     onClick = { navController.navigate(Screen.Home.route) }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Default.Article, contentDescription = "资讯") },
-                    label = { Text("资讯") },
+                    icon = { Icon(Icons.Default.Forum, contentDescription = "助手") },
+                    label = { Text("助手") },
                     selected = false,
-                    onClick = { navController.navigate(Screen.News.route) }
+                    onClick = { navController.navigate(Screen.Assistant.route) }
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Default.Person, contentDescription = "我的") },
