@@ -1,6 +1,5 @@
 package com.example.healthmanager.ui.screen
 
-import android.content.Context
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -11,15 +10,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.healthmanager.health.HealthScore
 import com.example.healthmanager.ui.viewmodel.ExerciseViewModel
-import com.example.healthmanager.ui.viewmodel.HealthConnectViewModel
+import com.example.healthmanager.ui.viewmodel.HealthScoreViewModel
 import com.example.healthmanager.ui.viewmodel.ProfileViewModel
 import com.example.healthmanager.ui.viewmodel.SleepViewModel
 import com.github.mikephil.charting.charts.BarChart
@@ -36,63 +35,44 @@ fun ReportScreen(navController: NavController) {
     val profileVm: ProfileViewModel = viewModel()
     val exerciseVm: ExerciseViewModel = viewModel()
     val sleepVm: SleepViewModel = viewModel()
-    val hcVm: HealthConnectViewModel = viewModel()
-    val context = LocalContext.current
+    val scoreVm: HealthScoreViewModel = viewModel()
     val userId = profileVm.prefs.currentUserId
+    val user by profileVm.currentUser.collectAsState()
 
-    // 确保传感器启动
     LaunchedEffect(userId) {
         exerciseVm.init(userId)
         sleepVm.init(userId)
-        hcVm.checkPermissions()
     }
 
-    // 同步 Health Connect 数据
-    LaunchedEffect(Unit) {
-        if (hcVm.permissionGranted.value) {
-            hcVm.syncTodaySteps()
-        }
+    LaunchedEffect(user) {
+        scoreVm.init(
+            userId = userId,
+            targetSteps = user?.targetSteps ?: 8000,
+            targetCalories = user?.targetCalories ?: 2000
+        )
     }
 
-    // 获取步数数据
     val sensorSteps by exerciseVm.sensorSteps.collectAsState()
-    val hcSteps by hcVm.todayStepsFromHC.collectAsState()
-    val hcPermission by hcVm.permissionGranted.collectAsState()
-    val todaySteps by exerciseVm.todaySteps.collectAsState()
-
-    // 从 SharedPreferences 直接读取传感器步数（确保一致性）
-    val prefs = context.getSharedPreferences("step_counter_prefs", Context.MODE_PRIVATE)
-    val savedSteps = prefs.getInt("current_steps", 0)
+    val weekExercise by exerciseVm.weekRecords.collectAsState()
+    val weekSleep by sleepVm.weekRecords.collectAsState()
+    val avgSleep by sleepVm.avgDuration.collectAsState()
+    val healthScore by scoreVm.healthScore.collectAsState()
 
     // 近7天日期标签
     val dates = (6 downTo 0).map {
         LocalDate.now().minusDays(it.toLong()).format(DateTimeFormatter.ISO_LOCAL_DATE)
     }
     val dayLabels = dates.map { it.substring(5) }
-
     val todayDate = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
 
-    val weekExercise by exerciseVm.weekRecords.collectAsState()
-    val weekSleep by sleepVm.weekRecords.collectAsState()
-    val avgSleep by sleepVm.avgDuration.collectAsState()
+    // 今日步数：优先使用传感器实时数据
+    val displayTodaySteps = if (sensorSteps > 0) sensorSteps
+        else weekExercise.filter { it.date == todayDate }.sumOf { it.steps }
 
-    // 今日步数（优先使用传感器实时数据 > SharedPreferences > HC > 数据库）
-    val displayTodaySteps = when {
-        sensorSteps > 0 -> sensorSteps
-        savedSteps > 0 -> savedSteps
-        hcPermission && hcSteps > 0 -> hcSteps.toInt()
-        else -> todaySteps
-    }
-
-    // 按日期聚合步数：历史日期使用数据库归档记录，今天使用实时步数
-    val stepsByDate = dates.mapIndexed { index, date ->
+    // 按日期聚合步数：过去的天使用数据库归档记录，今天使用传感器实时步数
+    val stepsByDate = dates.map { date ->
         if (date == todayDate) {
-            when {
-                sensorSteps > 0 -> sensorSteps.toFloat()
-                savedSteps > 0 -> savedSteps.toFloat()
-                hcPermission && hcSteps > 0 -> hcSteps.toFloat()
-                else -> todaySteps.toFloat()
-            }
+            displayTodaySteps.toFloat()
         } else {
             weekExercise.filter { it.date == date }.sumOf { it.steps }.toFloat()
         }
@@ -158,12 +138,11 @@ fun ReportScreen(navController: NavController) {
                 )
             }
 
-            // 健康建议
-            HealthAdviceCard(
-                avgSleep = avgSleep,
-                avgSteps = if (stepsByDate.any { it > 0 })
-                    stepsByDate.filter { it > 0 }.average().toFloat() else 0f
-            )
+            // 多维度健康评分
+            HealthScoreSection(healthScore = healthScore)
+
+            // 个性化健康建议（基于评分引擎生成）
+            HealthAdviceCard(healthScore = healthScore)
         }
     }
 }
@@ -347,31 +326,122 @@ private fun SleepLineChart(
     )
 }
 
+/**
+ * 多维度健康评分卡片
+ * 展示总分、各维度得分条、评分等级
+ */
 @Composable
-private fun HealthAdviceCard(avgSleep: Float, avgSteps: Float) {
+private fun HealthScoreSection(healthScore: HealthScore) {
+    Text("多维度健康评分", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp)
+        ) {
+            // 总分 + 等级
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // 大号总分
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = String.format("%.0f", healthScore.totalScore),
+                        fontSize = 56.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Text(
+                        text = "综合评分",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(24.dp))
+
+                // 等级 + 维度分数
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "${healthScore.level.emoji} ${healthScore.level.label}",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
+                    )
+                    Text(
+                        text = "运动40% + 睡眠30% + 饮食30%",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.6f)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // 三维度得分
+                    ScoreBar("运动", healthScore.exerciseScore, MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    ScoreBar("睡眠", healthScore.sleepScore, MaterialTheme.colorScheme.secondary)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    ScoreBar("饮食", healthScore.dietScore, MaterialTheme.colorScheme.tertiary)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScoreBar(
+    label: String,
+    score: Float,
+    color: androidx.compose.ui.graphics.Color
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 12.sp,
+            modifier = Modifier.width(30.dp),
+            color = MaterialTheme.colorScheme.onTertiaryContainer
+        )
+        LinearProgressIndicator(
+            progress = { (score / 100f).coerceIn(0f, 1f) },
+            modifier = Modifier
+                .weight(1f)
+                .height(6.dp),
+            color = color,
+            trackColor = color.copy(alpha = 0.2f),
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = String.format("%.0f", score),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.width(26.dp),
+            color = MaterialTheme.colorScheme.onTertiaryContainer
+        )
+    }
+}
+
+/**
+ * 个性化健康建议（基于 HealthScoreEngine 评分结果生成）
+ */
+@Composable
+private fun HealthAdviceCard(healthScore: HealthScore) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text("个性化健康建议", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.height(12.dp))
 
-            val advices = buildList {
-                if (avgSleep < 7f) add("• 近期平均睡眠 ${String.format("%.1f", avgSleep)} 小时，低于推荐的7-9小时，建议调整作息，早睡早起。")
-                else add("• 睡眠时长达标（${String.format("%.1f", avgSleep)}小时），继续保持良好的睡眠习惯！")
-
-                when {
-                    avgSteps < 3000f -> add("• 日均步数仅 ${avgSteps.toInt()} 步，活动量严重不足，建议增加日常步行。")
-                    avgSteps < 6000f -> add("• 日均步数 ${avgSteps.toInt()} 步，建议增加步行，目标8000步/天。")
-                    avgSteps >= 8000f -> add("• 日均步数 ${avgSteps.toInt()} 步，运动量达标！继续保持。")
-                    else -> add("• 日均步数 ${avgSteps.toInt()} 步，距离目标还差 ${(8000 - avgSteps).toInt()} 步，加油！")
-                }
-
-                add("• 建议保持三餐均衡，控制精加工食品和高糖饮料摄入，增加蔬菜水果比例。")
-                add("• 每周保持3-5次有氧运动，每次不少于30分钟，有助于改善心肺功能。")
-            }
-
-            advices.forEach { advice ->
+            healthScore.advices.forEach { advice ->
                 Text(
-                    text = advice,
+                    text = "• $advice",
                     fontSize = 14.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(vertical = 4.dp),
