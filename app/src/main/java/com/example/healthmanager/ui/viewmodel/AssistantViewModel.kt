@@ -92,7 +92,7 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun clearChat() {
-        _messages.value = emptyList()
-        prefs.edit().remove("messages").apply()
+        _messages.value = listOf(welcomeMessage)
+        saveMessages(_messages.value)
     }
 }
