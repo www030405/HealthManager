@@ -24,6 +24,7 @@ import com.example.healthmanager.health.HealthScore
 import com.example.healthmanager.ui.viewmodel.ExerciseViewModel
 import com.example.healthmanager.ui.viewmodel.HealthConnectViewModel
 import com.example.healthmanager.ui.viewmodel.HealthScoreViewModel
+import com.example.healthmanager.ui.viewmodel.HealthTipViewModel
 import com.example.healthmanager.ui.viewmodel.ProfileViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -35,6 +36,8 @@ fun HomeScreen(navController: NavController) {
     val exerciseVm: ExerciseViewModel = viewModel()
     val hcVm: HealthConnectViewModel = viewModel()
     val scoreVm: HealthScoreViewModel = viewModel()
+    val tipVm: HealthTipViewModel = viewModel()
+    val tips by tipVm.tips.collectAsState()
     val user by profileVm.currentUser.collectAsState()
     val userId = profileVm.prefs.currentUserId
     val context = LocalContext.current
@@ -184,20 +187,15 @@ fun HomeScreen(navController: NavController) {
                         }
                     }
                     
-                    // 传感器状态提示
-                    if (!isSensorAvailable && !hcVm.isAvailable) {
-                        Spacer(modifier = Modifier.height(4.dp))
+                    // 健康小Tips
+                    if (tips.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        val randomTip = tips.random()
                         Text(
-                            text = "⚠️ 设备不支持硬件计步器（可能是模拟器）",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    } else if (sensorSteps > 0) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "✅ 传感器工作正常：$sensorSteps 步",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.primary
+                            text = "💡 健康小Tip: ${randomTip.content}",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            modifier = Modifier.padding(vertical = 4.dp)
                         )
                     }
                 }
