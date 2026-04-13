@@ -104,6 +104,37 @@ object HealthNotificationManager {
     }
 
     /**
+     * 调度每日健康评分存储任务
+     * 每天凌晨1点执行，计算并保存当天健康评分
+     */
+    fun scheduleDailyHealthScore(context: Context) {
+        val request = PeriodicWorkRequestBuilder<DailyHealthScoreWorker>(
+            repeatInterval = 1,
+            repeatIntervalTimeUnit = TimeUnit.DAYS
+        )
+            .setInitialDelay(calculateDelayToMidnight() + 3600000, TimeUnit.MILLISECONDS) // 凌晨1点
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiresBatteryNotLow(true)
+                    .build()
+            )
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            DailyHealthScoreWorker.WORK_NAME,
+            ExistingPeriodicWorkPolicy.UPDATE,
+            request
+        )
+    }
+
+    /**
+     * 取消每日健康评分存储任务
+     */
+    fun cancelDailyHealthScore(context: Context) {
+        WorkManager.getInstance(context).cancelUniqueWork(DailyHealthScoreWorker.WORK_NAME)
+    }
+
+    /**
      * 计算距离下次提醒时间（默认每天早上8点提醒）
      */
     private fun calculateInitialDelay(): Long {

@@ -47,6 +47,15 @@ class DietViewModel(application: Application) : AndroidViewModel(application) {
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
 
+    // 本周饮食记录
+    val weekRecords: StateFlow<List<DietRecord>> =
+        _userId.flatMapLatest { uid ->
+            if (uid > 0) repo.getAllRecords(uid).map { records ->
+                val sevenDaysAgo = LocalDate.now().minusDays(6).format(DateTimeFormatter.ISO_LOCAL_DATE)
+                records.filter { it.date >= sevenDaysAgo }
+            } else flowOf(emptyList())
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _saveResult = MutableStateFlow<String?>(null)
     val saveResult: StateFlow<String?> = _saveResult
 

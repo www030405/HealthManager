@@ -17,15 +17,19 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.healthmanager.health.HealthScore
+import com.example.healthmanager.health.HealthScoreEngine
+import com.example.healthmanager.ui.viewmodel.DietViewModel
 import com.example.healthmanager.ui.viewmodel.ExerciseViewModel
 import com.example.healthmanager.ui.viewmodel.HealthScoreViewModel
 import com.example.healthmanager.ui.viewmodel.ProfileViewModel
 import com.example.healthmanager.ui.viewmodel.SleepViewModel
 import com.github.mikephil.charting.charts.BarChart
 import com.github.mikephil.charting.charts.LineChart
+import com.github.mikephil.charting.charts.PieChart
 import com.github.mikephil.charting.components.XAxis
 import com.github.mikephil.charting.data.*
 import com.github.mikephil.charting.formatter.IndexAxisValueFormatter
+import com.github.mikephil.charting.formatter.PercentFormatter
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -35,6 +39,7 @@ fun ReportScreen(navController: NavController) {
     val profileVm: ProfileViewModel = viewModel()
     val exerciseVm: ExerciseViewModel = viewModel()
     val sleepVm: SleepViewModel = viewModel()
+    val dietVm: DietViewModel = viewModel()
     val scoreVm: HealthScoreViewModel = viewModel()
     val userId = profileVm.prefs.currentUserId
     val user by profileVm.currentUser.collectAsState()
@@ -42,6 +47,7 @@ fun ReportScreen(navController: NavController) {
     LaunchedEffect(userId) {
         exerciseVm.init(userId)
         sleepVm.init(userId)
+        dietVm.init(userId)
     }
 
     LaunchedEffect(user) {
@@ -81,6 +87,65 @@ fun ReportScreen(navController: NavController) {
     // 按日期聚合睡眠时长
     val sleepByDate = dates.map { date ->
         weekSleep.filter { it.date == date }.sumOf { it.durationHours.toDouble() }.toFloat()
+    }
+
+    // 获取上周数据
+    val lastWeekDates = (13 downTo 7).map {
+        LocalDate.now().minusDays(it.toLong()).format(DateTimeFormatter.ISO_LOCAL_DATE)
+    }
+    val lastWeekSteps = lastWeekDates.map { date ->
+        weekExercise.filter { it.date == date }.sumOf { it.steps }.toFloat()
+    }
+    val lastWeekSleep = lastWeekDates.map { date ->
+        weekSleep.filter { it.date == date }.sumOf { it.durationHours.toDouble() }.toFloat()
+    }
+
+    // 运动类型分布（本周）- 统计走路/跑步/上楼梯/骑行/游泳
+    val exerciseTypes = listOf("走路", "跑步", "上楼梯", "骑行", "游泳")
+    val exerciseTypeDistribution = weekExercise
+        .filter { it.exerciseType in exerciseTypes }
+        .groupBy { it.exerciseType }
+        .mapValues { (_, records) -> records.sumOf { it.steps }.toFloat() }
+    val exerciseTypeCalories = weekExercise
+        .filter { it.exerciseType in exerciseTypes }
+        .groupBy { it.exerciseType }
+        .mapValues { (_, records) -> records.sumOf { it.caloriesBurned.toDouble() }.toFloat() }
+
+    // 健康评分趋势（本周每日计算）
+    val scoreTrend = dates.mapIndexed { i, date ->
+        // 今日使用传感器步数，历史天使用数据库
+        val daySteps = if (date == todayDate && sensorSteps > 0) {
+            sensorSteps
+        } else {
+            weekExercise.filter { it.date == date }.sumOf { it.steps }
+        }
+        
+        val daySleep = weekSleep.filter { it.date == date }.firstOrNull()
+        val dayDiet = dietVm.weekRecords.value.filter { it.date == date }
+        
+        // 使用用户目标
+        val targetSteps = user?.targetSteps ?: 8000
+        val targetCalories = user?.targetCalories ?: 2000
+        
+        val exerciseScore = HealthScoreEngine.calculateExerciseScore(
+            todaySteps = daySteps,
+            targetSteps = targetSteps,
+            todayExerciseMinutes = weekExercise.filter { it.date == date }.sumOf { it.durationMinutes },
+            weekActiveDays = 1
+        )
+        val sleepScore = HealthScoreEngine.calculateSleepScore(
+            durationHours = daySleep?.durationHours ?: 0f,
+            quality = daySleep?.quality ?: 0,  // 与首页一致，null时用0
+            hasRecord = daySleep != null
+        )
+        val dietScore = HealthScoreEngine.calculateDietScore(
+            totalCalories = dayDiet.sumOf { it.calories.toDouble() }.toFloat(),
+            targetCalories = targetCalories,
+            mealCount = dayDiet.map { it.mealType }.distinct().count { it in listOf("早餐", "午餐", "晚餐") },
+            hasRecord = dayDiet.isNotEmpty()
+        )
+        
+        HealthScoreEngine.calculateTotalScore(exerciseScore, sleepScore, dietScore)
     }
 
     Scaffold(
@@ -138,10 +203,58 @@ fun ReportScreen(navController: NavController) {
                 )
             }
 
-            // 多维度健康评分
-            HealthScoreSection(healthScore = healthScore)
+            // 运动类型分布饼图
+            Text("本周运动类型分布", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Card(modifier = Modifier.fillMaxWidth()) {
+                if (exerciseTypeDistribution.isNotEmpty() && exerciseTypeDistribution.values.any { it > 0 }) {
+                    ExerciseTypePieChart(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp)
+                            .padding(8.dp),
+                        typeSteps = exerciseTypeDistribution,
+                        typeCalories = exerciseTypeCalories
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "暂无运动数据",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
 
-            // 个性化健康建议（基于评分引擎生成）
+            // 健康评分趋势图
+            Text("本周健康评分趋势", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Card(modifier = Modifier.fillMaxWidth()) {
+                ScoreTrendChart(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .padding(8.dp),
+                    values = scoreTrend,
+                    labels = dayLabels
+                )
+            }
+
+            // 周对比：本周 vs 上周
+            Text("本周 vs 上周对比", fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
+            Card(modifier = Modifier.fillMaxWidth()) {
+                WeekComparisonCard(
+                    thisWeekSteps = stepsByDate.sum().toInt(),
+                    lastWeekSteps = lastWeekSteps.sum().toInt(),
+                    thisWeekSleep = avgSleep,
+                    lastWeekSleep = lastWeekSleep.filter { it > 0 }.takeIf { it.isNotEmpty() }?.average()?.toFloat() ?: 0f
+                )
+            }
+
+            // 个性化健康建议（基于评分引擎生成）- 最下方
             HealthAdviceCard(healthScore = healthScore)
         }
     }
@@ -449,5 +562,185 @@ private fun HealthAdviceCard(healthScore: HealthScore) {
                 )
             }
         }
+    }
+}
+
+/**
+ * 运动类型分布饼图
+ */
+@Composable
+private fun ExerciseTypePieChart(
+    modifier: Modifier = Modifier,
+    typeSteps: Map<String, Float>,
+    typeCalories: Map<String, Float>
+) {
+    val colors = listOf(
+        AndroidColor.parseColor("#4CAF50"),
+        AndroidColor.parseColor("#2196F3"),
+        AndroidColor.parseColor("#FF9800"),
+        AndroidColor.parseColor("#9C27B0"),
+        AndroidColor.parseColor("#607D8B")
+    )
+    
+    val entries = typeSteps.filter { it.value > 0 }.map { com.github.mikephil.charting.data.PieEntry(it.value, it.key) }
+    
+    AndroidView(
+        factory = { context ->
+            PieChart(context).apply {
+                description.isEnabled = false
+                isDrawHoleEnabled = true
+                holeRadius = 45f
+                transparentCircleRadius = 50f
+                setUsePercentValues(true)
+                setEntryLabelTextSize(11f)
+                setEntryLabelColor(AndroidColor.WHITE)
+                legend.isEnabled = true
+                legend.textSize = 11f
+            }
+        },
+        update = { chart ->
+            val dataSet = com.github.mikephil.charting.data.PieDataSet(entries, "运动类型").apply {
+                setColors(colors.take(entries.size))
+                sliceSpace = 2f
+                valueTextSize = 11f
+                valueTextColor = AndroidColor.WHITE
+                valueFormatter = PercentFormatter(chart)
+            }
+            chart.data = com.github.mikephil.charting.data.PieData(dataSet)
+            chart.invalidate()
+        },
+        modifier = modifier
+    )
+}
+
+/**
+ * 健康评分趋势图
+ */
+@Composable
+private fun ScoreTrendChart(
+    modifier: Modifier = Modifier,
+    values: List<Float>,
+    labels: List<String>
+) {
+    AndroidView(
+        factory = { context ->
+            LineChart(context).apply {
+                description.isEnabled = false
+                legend.isEnabled = false
+                setDrawGridBackground(false)
+                isHighlightPerTapEnabled = false
+                setPinchZoom(false)
+                setScaleEnabled(false)
+
+                xAxis.apply {
+                    position = XAxis.XAxisPosition.BOTTOM
+                    setDrawGridLines(false)
+                    granularity = 1f
+                    valueFormatter = IndexAxisValueFormatter(labels.toTypedArray())
+                    textSize = 10f
+                }
+                axisLeft.apply {
+                    axisMinimum = 0f
+                    axisMaximum = 100f
+                    textSize = 10f
+                }
+                axisRight.isEnabled = false
+            }
+        },
+        update = { chart ->
+            val entries = values.mapIndexed { i, v -> com.github.mikephil.charting.data.Entry(i.toFloat(), v) }
+            val dataSet = com.github.mikephil.charting.data.LineDataSet(entries, "健康评分").apply {
+                color = AndroidColor.parseColor("#FF5722")
+                setCircleColor(AndroidColor.parseColor("#FF5722"))
+                circleRadius = 4f
+                lineWidth = 2f
+                setDrawFilled(true)
+                fillColor = AndroidColor.parseColor("#FFCCBC")
+                fillAlpha = 100
+                setDrawValues(true)
+                valueTextSize = 9f
+                mode = com.github.mikephil.charting.data.LineDataSet.Mode.CUBIC_BEZIER
+            }
+            chart.data = com.github.mikephil.charting.data.LineData(dataSet)
+            chart.invalidate()
+        },
+        modifier = modifier
+    )
+}
+
+/**
+ * 周对比卡片
+ */
+@Composable
+private fun WeekComparisonCard(
+    thisWeekSteps: Int,
+    lastWeekSteps: Int,
+    thisWeekSleep: Float,
+    lastWeekSleep: Float
+) {
+    Column(modifier = Modifier.padding(16.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            ComparisonItem(
+                label = "总步数",
+                thisValue = thisWeekSteps,
+                lastValue = lastWeekSteps,
+                unit = "步"
+            )
+            ComparisonItem(
+                label = "平均睡眠",
+                thisValue = thisWeekSleep,
+                lastValue = lastWeekSleep,
+                unit = "小时"
+            )
+        }
+    }
+}
+
+@Composable
+private fun ComparisonItem(
+    label: String,
+    thisValue: Number,
+    lastValue: Number,
+    unit: String
+) {
+    val diff = when (label) {
+        "总步数" -> thisValue.toInt() - lastValue.toInt()
+        "平均睡眠" -> ((thisValue.toFloat() - lastValue.toFloat()) * 10).toInt()
+        else -> 0
+    }
+    val diffText = when {
+        diff > 0 -> "+$diff"
+        diff < 0 -> "$diff"
+        else -> "持平"
+    }
+    
+    Column(
+        modifier = Modifier.width(120.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            when (label) {
+                "平均睡眠" -> String.format("%.1f", thisValue)
+                else -> "$thisValue"
+            },
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(unit, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            "vs上周: $diffText",
+            fontSize = 11.sp,
+            color = when {
+                diff > 0 -> MaterialTheme.colorScheme.primary
+                diff < 0 -> MaterialTheme.colorScheme.error
+                else -> MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
     }
 }
