@@ -21,11 +21,13 @@ import androidx.navigation.NavController
 import com.example.healthmanager.healthconnect.HealthConnectManager
 import com.example.healthmanager.navigation.Screen
 import com.example.healthmanager.health.HealthScore
+import com.example.healthmanager.ui.viewmodel.DietViewModel
 import com.example.healthmanager.ui.viewmodel.ExerciseViewModel
 import com.example.healthmanager.ui.viewmodel.HealthConnectViewModel
 import com.example.healthmanager.ui.viewmodel.HealthScoreViewModel
 import com.example.healthmanager.ui.viewmodel.HealthTipViewModel
 import com.example.healthmanager.ui.viewmodel.ProfileViewModel
+import com.example.healthmanager.ui.viewmodel.SleepViewModel
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 
@@ -34,6 +36,8 @@ import java.time.format.DateTimeFormatter
 fun HomeScreen(navController: NavController) {
     val profileVm: ProfileViewModel = viewModel()
     val exerciseVm: ExerciseViewModel = viewModel()
+    val sleepVm: SleepViewModel = viewModel()
+    val dietVm: DietViewModel = viewModel()
     val hcVm: HealthConnectViewModel = viewModel()
     val scoreVm: HealthScoreViewModel = viewModel()
     val tipVm: HealthTipViewModel = viewModel()
@@ -44,10 +48,12 @@ fun HomeScreen(navController: NavController) {
 
     LaunchedEffect(userId) {
         exerciseVm.init(userId)
+        sleepVm.init(userId)
+        dietVm.init(userId)
         hcVm.checkPermissions()
     }
 
-    // 健康评分初始化（依赖用户目标数据）
+    // 用户切换时重新初始化健康评分
     LaunchedEffect(user) {
         scoreVm.init(
             userId = userId,

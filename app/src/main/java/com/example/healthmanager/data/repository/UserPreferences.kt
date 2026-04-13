@@ -14,11 +14,19 @@ class UserPreferences(context: Context) {
 
     var currentUserId: Int
         get() = prefs.getInt(KEY_USER_ID, -1)
-        set(value) = prefs.edit().putInt(KEY_USER_ID, value).apply()
+        set(value) {
+            prefs.edit().putInt(KEY_USER_ID, value).apply()
+            onUserIdChanged?.invoke(value)
+        }
+
+    var onUserIdChanged: ((Int) -> Unit)? = null
 
     fun isLoggedIn(): Boolean = currentUserId != -1
 
-    fun logout() = prefs.edit().putInt(KEY_USER_ID, -1).apply()
+    fun logout() {
+        prefs.edit().putInt(KEY_USER_ID, -1).apply()
+        onUserIdChanged?.invoke(-1)
+    }
 
     companion object {
         private const val KEY_USER_ID = "current_user_id"

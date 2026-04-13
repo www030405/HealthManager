@@ -40,6 +40,12 @@ class MainActivity : ComponentActivity() {
         // 启动每日健康评分存储任务（每天凌晨计算并保存健康评分）
         HealthNotificationManager.scheduleDailyHealthScore(this)
 
+        // 启动睡眠提醒（每天 23:30）
+        HealthNotificationManager.scheduleSleepReminder(this)
+
+        // 启动饮食提醒（每天 11:40 和 18:00）
+        HealthNotificationManager.scheduleMealReminder(this)
+
         // 判断是否已登录
         val prefs = UserPreferences(this)
         val startDestination = if (prefs.isLoggedIn()) Screen.Home.route else Screen.Login.route

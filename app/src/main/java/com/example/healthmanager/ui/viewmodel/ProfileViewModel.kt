@@ -18,6 +18,12 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
 
     private val _userId = MutableStateFlow(prefs.currentUserId)
 
+    init {
+        prefs.onUserIdChanged = { newId ->
+            _userId.value = newId
+        }
+    }
+
     val currentUser: StateFlow<User?> = _userId
         .flatMapLatest { uid ->
             if (uid > 0) userRepo.getUserById(uid) else flowOf(null)

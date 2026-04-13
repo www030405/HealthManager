@@ -135,6 +135,67 @@ object HealthNotificationManager {
     }
 
     /**
+     * 设置睡眠提醒 - 每天 23:30
+     */
+    fun scheduleSleepReminder(context: Context) {
+        val request = PeriodicWorkRequestBuilder<SleepReminderWorker>(
+            repeatInterval = 1,
+            repeatIntervalTimeUnit = TimeUnit.DAYS
+        )
+            .setInitialDelay(calculateDelayToTime(23, 30), TimeUnit.MILLISECONDS)
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiresBatteryNotLow(true)
+                    .build()
+            )
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            "sleep_reminder",
+            ExistingPeriodicWorkPolicy.UPDATE,
+            request
+        )
+    }
+
+    /**
+     * 设置饮食提醒 - 每天 11:40 和 18:00
+     */
+    fun scheduleMealReminder(context: Context) {
+        val request = PeriodicWorkRequestBuilder<MealReminderWorker>(
+            repeatInterval = 1,
+            repeatIntervalTimeUnit = TimeUnit.DAYS
+        )
+            .setInitialDelay(calculateDelayToTime(11, 40), TimeUnit.MILLISECONDS)
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiresBatteryNotLow(true)
+                    .build()
+            )
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            "meal_reminder",
+            ExistingPeriodicWorkPolicy.REPLACE,
+            request
+        )
+    }
+
+    /**
+     * 计算距离指定时间的毫秒数
+     */
+    private fun calculateDelayToTime(targetHour: Int, targetMinute: Int): Long {
+        val now = java.util.Calendar.getInstance()
+        val target = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, targetHour)
+            set(java.util.Calendar.MINUTE, targetMinute)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+            if (before(now)) add(java.util.Calendar.DAY_OF_MONTH, 1)
+        }
+        return target.timeInMillis - now.timeInMillis
+    }
+
+    /**
      * 计算距离下次提醒时间（默认每天早上8点提醒）
      */
     private fun calculateInitialDelay(): Long {
