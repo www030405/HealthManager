@@ -461,7 +461,7 @@ private fun HealthScoreCard(healthScore: HealthScore) {
                         color = MaterialTheme.colorScheme.onTertiaryContainer
                     )
                     Text(
-                        text = "运动·睡眠·饮食 加权评估",
+                        text = "运动·睡眠·饮食",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.7f)
                     )
