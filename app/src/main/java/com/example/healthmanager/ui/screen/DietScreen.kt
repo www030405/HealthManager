@@ -248,6 +248,12 @@ private fun AddDietDialog(
     var carbs by remember { mutableStateOf(initialCarbs) }
     var note by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
+    var amountError by remember { mutableStateOf(false) }
+    var caloriesError by remember { mutableStateOf(false) }
+    var proteinError by remember { mutableStateOf(false) }
+    var fatError by remember { mutableStateOf(false) }
+    var carbsError by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -277,39 +283,67 @@ private fun AddDietDialog(
                 }
                 OutlinedTextField(value = foodName, onValueChange = { foodName = it },
                     label = { Text("食物名称 *") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(value = amount, onValueChange = { amount = it },
+                OutlinedTextField(value = amount, onValueChange = { amount = it; amountError = false },
                     label = { Text("食用量（克）") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    isError = amountError,
+                    supportingText = if (amountError) {{ Text("请输入0或正数") }} else null,
                     modifier = Modifier.fillMaxWidth(), singleLine = true)
-                OutlinedTextField(value = calories, onValueChange = { calories = it },
+                OutlinedTextField(value = calories, onValueChange = { calories = it; caloriesError = false },
                     label = { Text("卡路里（kcal）") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    isError = caloriesError,
+                    supportingText = if (caloriesError) {{ Text("请输入0或正数") }} else null,
                     modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(value = protein, onValueChange = { protein = it },
+                    OutlinedTextField(value = protein, onValueChange = { protein = it; proteinError = false },
                         label = { Text("蛋白质g") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        isError = proteinError,
+                        supportingText = if (proteinError) {{ Text("请输入0或正数") }} else null,
                         modifier = Modifier.weight(1f), singleLine = true)
-                    OutlinedTextField(value = fat, onValueChange = { fat = it },
+                    OutlinedTextField(value = fat, onValueChange = { fat = it; fatError = false },
                         label = { Text("脂肪g") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        isError = fatError,
+                        supportingText = if (fatError) {{ Text("请输入0或正数") }} else null,
                         modifier = Modifier.weight(1f), singleLine = true)
-                    OutlinedTextField(value = carbs, onValueChange = { carbs = it },
+                    OutlinedTextField(value = carbs, onValueChange = { carbs = it; carbsError = false },
                         label = { Text("碳水g") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        isError = carbsError,
+                        supportingText = if (carbsError) {{ Text("请输入0或正数") }} else null,
                         modifier = Modifier.weight(1f), singleLine = true)
                 }
             }
         },
         confirmButton = {
             TextButton(onClick = {
+                // 验证输入
+                val amountVal = amount.toFloatOrNull()
+                val caloriesVal = calories.toFloatOrNull()
+                val proteinVal = protein.toFloatOrNull()
+                val fatVal = fat.toFloatOrNull()
+                val carbsVal = carbs.toFloatOrNull()
+
+                amountError = amount.isNotEmpty() && (amountVal == null || amountVal < 0)
+                caloriesError = calories.isNotEmpty() && (caloriesVal == null || caloriesVal < 0)
+                proteinError = protein.isNotEmpty() && (proteinVal == null || proteinVal < 0)
+                fatError = fat.isNotEmpty() && (fatVal == null || fatVal < 0)
+                carbsError = carbs.isNotEmpty() && (carbsVal == null || carbsVal < 0)
+
+                if (amountError || caloriesError || proteinError || fatError || carbsError) {
+                    errorMessage = "请重新输入"
+                    return@TextButton
+                }
+
                 if (foodName.isNotBlank()) {
                     onConfirm(selectedMeal, foodName,
-                        amount.toFloatOrNull() ?: 0f,
-                        calories.toFloatOrNull() ?: 0f,
-                        protein.toFloatOrNull() ?: 0f,
-                        fat.toFloatOrNull() ?: 0f,
-                        carbs.toFloatOrNull() ?: 0f,
+                        amountVal ?: 0f,
+                        caloriesVal ?: 0f,
+                        proteinVal ?: 0f,
+                        fatVal ?: 0f,
+                        carbsVal ?: 0f,
                         note)
                 }
             }) { Text("保存") }

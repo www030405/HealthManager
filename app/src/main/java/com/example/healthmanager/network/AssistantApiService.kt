@@ -101,7 +101,7 @@ class AssistantApiService {
 
     private fun parseResponse(jsonStr: String): String? {
         try {
-            Log.d(TAG, "开始解析JSON: $jsonStr")
+            Log.d(TAG, "开始解析JSON: ${jsonStr.substring(0, minOf(200, jsonStr.length))}")
             
             val json = org.json.JSONObject(jsonStr)
             
@@ -110,7 +110,15 @@ class AssistantApiService {
                 val error = json.getJSONObject("error")
                 val errorMessage = error.optString("message", "未知错误")
                 Log.e(TAG, "API返回错误: $errorMessage")
-                return "错误: $errorMessage"
+                return "抱歉，服务暂时不可用：$errorMessage"
+            }
+            
+            // 检查 code 字段
+            val code = json.optInt("code", 200)
+            if (code != 200) {
+                val msg = json.optString("msg", "未知错误")
+                Log.e(TAG, "API错误码: $code, 消息: $msg")
+                return "抱歉，服务暂时不可用"
             }
             
             val output = json.optJSONArray("output")
@@ -129,11 +137,11 @@ class AssistantApiService {
                 }
             }
             
-            Log.w(TAG, "未找到响应内容，返回原始JSON")
-            return jsonStr
+            Log.w(TAG, "未找到响应内容")
+            return "抱歉，我暂时无法回答这个问题，请换个话题试试~"
         } catch (e: Exception) {
             Log.e(TAG, "JSON解析异常: ${e.message}")
-            return "解析异常: ${e.message}"
+            return "抱歉，出现了一些问题，请稍后重试~"
         }
     }
 }
