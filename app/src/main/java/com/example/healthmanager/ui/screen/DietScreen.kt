@@ -13,15 +13,22 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.healthmanager.data.entity.DietRecord
 import com.example.healthmanager.ui.viewmodel.DietViewModel
 import com.example.healthmanager.ui.viewmodel.ProfileViewModel
+import com.github.mikephil.charting.charts.PieChart
+import com.github.mikephil.charting.data.PieData
+import com.github.mikephil.charting.data.PieDataSet
+import com.github.mikephil.charting.data.PieEntry
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -33,6 +40,7 @@ fun DietScreen(navController: NavController) {
     LaunchedEffect(userId) { viewModel.init(userId) }
 
     val todayCalories by viewModel.todayCalories.collectAsState()
+    val todayMacros by viewModel.todayMacros.collectAsState()
     val records by viewModel.todayRecords.collectAsState()
     val saveResult by viewModel.saveResult.collectAsState()
     val user by profileVm.currentUser.collectAsState()
@@ -113,6 +121,22 @@ fun DietScreen(navController: NavController) {
                             fontSize = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                }
+            }
+
+            // 三大营养素摄入饼图
+            if (todayMacros.carbs + todayMacros.protein + todayMacros.fat > 0) {
+                item {
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("今日饮食摘要", fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(bottom = 8.dp))
+                            MacroPieChart(
+                                carbs = todayMacros.carbs,
+                                protein = todayMacros.protein,
+                                fat = todayMacros.fat
+                            )
+                        }
                     }
                 }
             }
@@ -442,5 +466,50 @@ private fun FoodReferenceDialog(
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } }
+    )
+}
+
+@Composable
+private fun MacroPieChart(carbs: Float, protein: Float, fat: Float) {
+    val total = carbs + protein + fat
+    if (total <= 0) return
+
+    val entries = listOf(
+        PieEntry(carbs, "碳水 ${String.format("%.1f", carbs)}g"),
+        PieEntry(protein, "蛋白质 ${String.format("%.1f", protein)}g"),
+        PieEntry(fat, "脂肪 ${String.format("%.1f", fat)}g")
+    )
+
+    val colors = listOf(
+        Color(0xFF4CAF50).toArgb(),
+        Color(0xFF2196F3).toArgb(),
+        Color(0xFFFF9800).toArgb()
+    )
+
+    AndroidView(
+        factory = { context ->
+            PieChart(context).apply {
+                description.isEnabled = false
+                isDrawHoleEnabled = true
+                holeRadius = 50f
+                setUsePercentValues(true)
+                setEntryLabelTextSize(10f)
+                legend.isEnabled = true
+                legend.textSize = 10f
+            }
+        },
+        update = { chart ->
+            val dataSet = PieDataSet(entries, "三大营养素").apply {
+                setColors(colors)
+                sliceSpace = 2f
+                valueTextSize = 10f
+                valueTextColor = android.graphics.Color.WHITE
+            }
+            chart.data = PieData(dataSet)
+            chart.invalidate()
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(200.dp)
     )
 }

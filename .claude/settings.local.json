@@ -60,7 +60,13 @@
       "Bash(xargs wc:*)",
       "Bash(node create_chapter3.js)",
       "Bash(node read_pdf2.js)",
-      "Bash(node gen_chapter4.js)"
+      "Bash(node gen_chapter4.js)",
+      "Bash(node gen_chapter5.js)",
+      "Bash(cp temp.doc chapter3.doc)",
+      "Bash(cp temp.doc chapter4.doc)",
+      "Bash(where pdftoppm:*)",
+      "Bash(ls C:/Users/lenovo/Desktop/*chapter2* C:/Users/lenovo/Desktop/gen_chapter2* C:/Users/lenovo/Desktop/create_chapter2*)",
+      "Bash(node create_chapter2.js)"
     ]
   }
 }

@@ -41,7 +41,6 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
 
     private val gaitClassifier = GaitClassifier(application)
     val gaitResult: StateFlow<GaitResult?> = gaitClassifier.gaitResult
-    val usingCnn: StateFlow<Boolean> = gaitClassifier.usingCnn
 
     // GPS 定位追踪（骑行/游泳距离）
     private val locationTracker = LocationTracker(application)
@@ -145,7 +144,6 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
     fun init(userId: Int) {
         _userId.value = userId
         stepCounter.start()
-        gaitClassifier.loadModel()
         gaitClassifier.startListening()
     }
 

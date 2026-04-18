@@ -47,6 +47,21 @@ class DietViewModel(application: Application) : AndroidViewModel(application) {
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0f)
 
+    // 当天三大营养素摄入量
+    data class MacroNutrients(val carbs: Float, val protein: Float, val fat: Float)
+    val todayMacros: StateFlow<MacroNutrients> =
+        combine(_userId, _selectedDate) { uid, date -> Pair(uid, date) }
+            .flatMapLatest { (uid, date) ->
+                if (uid > 0) repo.getRecordsByDate(uid, date).map { records ->
+                    MacroNutrients(
+                        carbs = records.sumOf { it.carbohydrates.toDouble() }.toFloat(),
+                        protein = records.sumOf { it.protein.toDouble() }.toFloat(),
+                        fat = records.sumOf { it.fat.toDouble() }.toFloat()
+                    )
+                } else flowOf(MacroNutrients(0f, 0f, 0f))
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), MacroNutrients(0f, 0f, 0f))
+
     // 本周饮食记录
     val weekRecords: StateFlow<List<DietRecord>> =
         _userId.flatMapLatest { uid ->
