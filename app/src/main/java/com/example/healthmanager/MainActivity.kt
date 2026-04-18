@@ -46,6 +46,9 @@ class MainActivity : ComponentActivity() {
         // 启动饮食提醒（每天 11:40 和 18:00）
         HealthNotificationManager.scheduleMealReminder(this)
 
+        // 启动饮水提醒（每2小时一次，从8:00开始）
+        HealthNotificationManager.scheduleWaterReminder(this)
+
         // 判断是否已登录
         val prefs = UserPreferences(this)
         val startDestination = if (prefs.isLoggedIn()) Screen.Home.route else Screen.Login.route

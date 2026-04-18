@@ -181,6 +181,29 @@ object HealthNotificationManager {
     }
 
     /**
+     * 设置饮水提醒 - 每2小时一次，从早上8:00开始
+     */
+    fun scheduleWaterReminder(context: Context) {
+        val request = PeriodicWorkRequestBuilder<WaterReminderWorker>(
+            repeatInterval = 2,
+            repeatIntervalTimeUnit = TimeUnit.HOURS
+        )
+            .setInitialDelay(calculateDelayToTime(8, 0), TimeUnit.MILLISECONDS)
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiresBatteryNotLow(true)
+                    .build()
+            )
+            .build()
+
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+            "water_reminder",
+            ExistingPeriodicWorkPolicy.REPLACE,
+            request
+        )
+    }
+
+    /**
      * 计算距离指定时间的毫秒数
      */
     private fun calculateDelayToTime(targetHour: Int, targetMinute: Int): Long {
