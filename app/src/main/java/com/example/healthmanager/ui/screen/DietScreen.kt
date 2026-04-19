@@ -311,32 +311,32 @@ private fun AddDietDialog(
                     label = { Text("食用量（克）") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     isError = amountError,
-                    supportingText = if (amountError) {{ Text("请输入0或正数") }} else null,
+                    supportingText = if (amountError) {{ Text("输入不合法") }} else null,
                     modifier = Modifier.fillMaxWidth(), singleLine = true)
                 OutlinedTextField(value = calories, onValueChange = { calories = it; caloriesError = false },
                     label = { Text("卡路里（kcal）") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     isError = caloriesError,
-                    supportingText = if (caloriesError) {{ Text("请输入0或正数") }} else null,
+                    supportingText = if (caloriesError) {{ Text("输入不合法") }} else null,
                     modifier = Modifier.fillMaxWidth(), singleLine = true)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(value = protein, onValueChange = { protein = it; proteinError = false },
                         label = { Text("蛋白质g") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         isError = proteinError,
-                        supportingText = if (proteinError) {{ Text("请输入0或正数") }} else null,
+                        supportingText = if (proteinError) {{ Text("输入不合法") }} else null,
                         modifier = Modifier.weight(1f), singleLine = true)
                     OutlinedTextField(value = fat, onValueChange = { fat = it; fatError = false },
                         label = { Text("脂肪g") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         isError = fatError,
-                        supportingText = if (fatError) {{ Text("请输入0或正数") }} else null,
+                        supportingText = if (fatError) {{ Text("输入不合法") }} else null,
                         modifier = Modifier.weight(1f), singleLine = true)
                     OutlinedTextField(value = carbs, onValueChange = { carbs = it; carbsError = false },
                         label = { Text("碳水g") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         isError = carbsError,
-                        supportingText = if (carbsError) {{ Text("请输入0或正数") }} else null,
+                        supportingText = if (carbsError) {{ Text("输入不合法") }} else null,
                         modifier = Modifier.weight(1f), singleLine = true)
                 }
             }
@@ -350,14 +350,22 @@ private fun AddDietDialog(
                 val fatVal = fat.toFloatOrNull()
                 val carbsVal = carbs.toFloatOrNull()
 
-                amountError = amount.isNotEmpty() && (amountVal == null || amountVal < 0)
-                caloriesError = calories.isNotEmpty() && (caloriesVal == null || caloriesVal < 0)
-                proteinError = protein.isNotEmpty() && (proteinVal == null || proteinVal < 0)
-                fatError = fat.isNotEmpty() && (fatVal == null || fatVal < 0)
-                carbsError = carbs.isNotEmpty() && (carbsVal == null || carbsVal < 0)
+                amountError = amount.isNotEmpty() && (amountVal == null || amountVal < 0 || amountVal > 99999)
+                caloriesError = calories.isNotEmpty() && (caloriesVal == null || caloriesVal < 0 || caloriesVal > 99999)
+                proteinError = protein.isNotEmpty() && (proteinVal == null || proteinVal < 0 || proteinVal > 99999)
+                fatError = fat.isNotEmpty() && (fatVal == null || fatVal < 0 || fatVal > 99999)
+                carbsError = carbs.isNotEmpty() && (carbsVal == null || carbsVal < 0 || carbsVal > 99999)
+
+                val nutritionSum = (proteinVal ?: 0f) + (fatVal ?: 0f) + (carbsVal ?: 0f)
+                val nutritionExceedError = nutritionSum > (amountVal ?: 0f)
 
                 if (amountError || caloriesError || proteinError || fatError || carbsError) {
-                    errorMessage = "请重新输入"
+                    errorMessage = "输入不合法"
+                    return@TextButton
+                }
+
+                if (nutritionExceedError) {
+                    errorMessage = "蛋白质+脂肪+碳水不得超过食用量"
                     return@TextButton
                 }
 

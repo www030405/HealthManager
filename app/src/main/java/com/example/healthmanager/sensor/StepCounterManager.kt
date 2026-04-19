@@ -202,6 +202,24 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
         event ?: return
         if (event.sensor.type == Sensor.TYPE_STEP_COUNTER) {
             val totalSteps = event.values[0].toLong()
+            val todayStr = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+            val lastDate = prefs.getString(KEY_LAST_DATE, null)
+
+            // 检测跨天
+            if (lastDate != null && lastDate != todayStr) {
+                // 跨天了，归档昨天的步数
+                val savedCurrentSteps = prefs.getInt(KEY_CURRENT_STEPS, 0)
+                if (savedCurrentSteps > 0 && lastDate != null) {
+                    archiveYesterdaySteps(lastDate, savedCurrentSteps)
+                    Log.d("StepCounter", "检测到跨天，归档昨天数据")
+                }
+                // 重置为新一天
+                initialSteps = -1L
+                _steps.value = 0
+                lastUpdateStepCount = 0
+                prefs.edit().clear().apply()
+                Log.d("StepCounter", "跨天重置：$todayStr")
+            }
 
             if (initialSteps < 0) {
                 initialSteps = totalSteps
