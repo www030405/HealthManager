@@ -20,16 +20,9 @@ import androidx.navigation.NavController
 import com.example.healthmanager.navigation.Screen
 import com.example.healthmanager.ui.viewmodel.AssistantViewModel
 
-data class ChatMessage(
-    val id: Long = System.currentTimeMillis(),
-    val content: String,
-    val isUser: Boolean,
-    val timestamp: Long = System.currentTimeMillis()
-)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NewsScreen(navController: NavController) {
+fun AssistantScreen(navController: NavController) {
     val viewModel: AssistantViewModel = viewModel()
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()

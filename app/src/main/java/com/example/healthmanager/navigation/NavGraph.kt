@@ -50,7 +50,7 @@ fun NavGraph(
         }
 
         composable(Screen.Assistant.route) {
-            NewsScreen(navController = navController)
+            AssistantScreen(navController = navController)
         }
     }
 }
