@@ -68,7 +68,13 @@
       "Bash(ls C:/Users/lenovo/Desktop/*chapter2* C:/Users/lenovo/Desktop/gen_chapter2* C:/Users/lenovo/Desktop/create_chapter2*)",
       "Bash(node create_chapter2.js)",
       "Bash(node create_chapter6.js)",
-      "Bash(node gen_section_5_9.js)"
+      "Bash(node gen_section_5_9.js)",
+      "Bash(find C:/Users/lenovo/Desktop -maxdepth 3 -name *5_8* -o -name *5.8* -o -name *chap*5*)",
+      "Bash(node gen_section_5_8.js)",
+      "Bash(where pandoc:*)",
+      "Bash(where soffice:*)",
+      "Read(//c/Program Files/LibreOffice/program/**)",
+      "Bash(py --version)"
     ]
   }
 }

@@ -61,7 +61,6 @@ class AssistantApiService {
                         response.append(line)
                     }
                     reader.close()
-
                     val jsonStr = response.toString()
                     Log.d(TAG, "响应: ${jsonStr.substring(0, minOf(500, jsonStr.length))}")
 
