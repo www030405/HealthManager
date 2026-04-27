@@ -51,6 +51,16 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
 
     private val archiveScope = CoroutineScope(Dispatchers.IO)
 
+    /**
+     * 当前会话所属日期。
+     * 用于在保存 prefs 时绑定数据真实归属的日期，
+     * 避免零点后未及时复位时把"今日日期+昨日步数"写入 prefs。
+     */
+    private var currentSessionDate: String = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+
+    /** 兜底③：定时检查跨天 */
+    private var dateCheckJob: Job? = null
+
     // ── 久坐检测 ──
     companion object {
         const val SEDENTARY_THRESHOLD_MS = 30 * 60 * 1000L  // 30分钟无步数变化视为久坐
@@ -97,13 +107,45 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
                 }
             }
         }
+
+        // 兜底③：每分钟检查一次系统日期，过了零点立即归档+清零
+        dateCheckJob?.cancel()
+        dateCheckJob = archiveScope.launch {
+            while (true) {
+                delay(60_000)
+                val today = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
+                if (today != currentSessionDate) {
+                    Log.d("StepCounter", "定时检测到跨天：$currentSessionDate -> $today")
+                    performDailyReset(today)
+                }
+            }
+        }
     }
 
     fun stop() {
         sensorManager.unregisterListener(this)
         sedentaryCheckJob?.cancel()
+        dateCheckJob?.cancel()
         saveCurrentState()
         Log.d("StepCounter", "传感器已停止")
+    }
+
+    /**
+     * 执行跨天复位：归档昨日步数、清空内存与 prefs、刷新会话日期。
+     * 三条兜底路径（start / onSensorChanged / 定时）均收敛到这里，避免逻辑分叉。
+     */
+    private fun performDailyReset(newDate: String) {
+        val previousDate = currentSessionDate
+        val previousSteps = _steps.value
+        if (previousSteps > 0) {
+            archiveYesterdaySteps(previousDate, previousSteps)
+        }
+        initialSteps = -1L
+        _steps.value = 0
+        lastUpdateStepCount = 0
+        prefs.edit().clear().apply()
+        currentSessionDate = newDate
+        Log.d("StepCounter", "已复位到 $newDate，归档 $previousDate: $previousSteps 步")
     }
 
     /**
@@ -122,16 +164,18 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
             initialSteps = savedInitialSteps
             _steps.value = savedCurrentSteps
             lastUpdateStepCount = savedCurrentSteps
+            currentSessionDate = todayStr
             Log.d("StepCounter", "恢复基准值：$initialSteps, 当前步数：${_steps.value}")
-        } else if (savedInitialSteps >= 0 && savedCurrentSteps > 0 && lastDate != null) {
-            // 跨天：将前一天步数归档到数据库
-            archiveYesterdaySteps(lastDate, savedCurrentSteps)
-
-            // 重置为新一天
+        } else if (lastDate != null && lastDate != todayStr) {
+            // 兜底①：启动时检测到跨天
+            if (savedCurrentSteps > 0) {
+                archiveYesterdaySteps(lastDate, savedCurrentSteps)
+            }
             initialSteps = -1L
             _steps.value = 0
             lastUpdateStepCount = 0
             prefs.edit().clear().apply()
+            currentSessionDate = todayStr
             Log.d("StepCounter", "新的一天($todayStr)，重置计步器，已归档 $lastDate: $savedCurrentSteps 步")
         } else {
             // 首次使用或无有效数据
@@ -139,6 +183,7 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
             _steps.value = 0
             lastUpdateStepCount = 0
             prefs.edit().clear().apply()
+            currentSessionDate = todayStr
             Log.d("StepCounter", "首次启动或无数据，重置计步器")
         }
     }
@@ -192,7 +237,8 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
             prefs.edit().apply {
                 putLong(KEY_INITIAL_STEPS, initialSteps)
                 putLong(KEY_LAST_TOTAL_STEPS, initialSteps + _steps.value)
-                putString(KEY_LAST_DATE, LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE))
+                // 用会话日期而非系统日期，避免零点后未及时复位时把昨日步数挂到今日日期下。
+                putString(KEY_LAST_DATE, currentSessionDate)
                 putInt(KEY_CURRENT_STEPS, _steps.value)
             }.apply()
         }
@@ -203,22 +249,11 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
         if (event.sensor.type == Sensor.TYPE_STEP_COUNTER) {
             val totalSteps = event.values[0].toLong()
             val todayStr = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
-            val lastDate = prefs.getString(KEY_LAST_DATE, null)
 
-            // 检测跨天
-            if (lastDate != null && lastDate != todayStr) {
-                // 跨天了，归档昨天的步数
-                val savedCurrentSteps = prefs.getInt(KEY_CURRENT_STEPS, 0)
-                if (savedCurrentSteps > 0 && lastDate != null) {
-                    archiveYesterdaySteps(lastDate, savedCurrentSteps)
-                    Log.d("StepCounter", "检测到跨天，归档昨天数据")
-                }
-                // 重置为新一天
-                initialSteps = -1L
-                _steps.value = 0
-                lastUpdateStepCount = 0
-                prefs.edit().clear().apply()
-                Log.d("StepCounter", "跨天重置：$todayStr")
+            // 兜底②：传感器事件触发时检测跨天
+            if (todayStr != currentSessionDate) {
+                Log.d("StepCounter", "传感器事件检测到跨天：$currentSessionDate -> $todayStr")
+                performDailyReset(todayStr)
             }
 
             if (initialSteps < 0) {
