@@ -14,13 +14,13 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 class AssistantViewModel(application: Application) : AndroidViewModel(application) {
-    
+
     private val apiService = AssistantApiService()
     private val prefs: SharedPreferences = application.getSharedPreferences("assistant_chat", 0)
-    
+
     private val _messages = MutableStateFlow<List<ChatMessage>>(loadMessages())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
-    
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -64,26 +64,26 @@ class AssistantViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun sendMessage(content: String) {
         if (content.isBlank()) return
-        
+
         android.util.Log.d("AssistantVM", "发送消息: $content")
-        
+
         if (_messages.value.isEmpty()) {
             _messages.value = listOf(welcomeMessage)
             saveMessages(_messages.value)
         }
-        
+
         val userMsg = ChatMessage(content = content, isUser = true)
         _messages.value = _messages.value + userMsg
         saveMessages(_messages.value)
-        
+
         _isLoading.value = true
-        
+
         viewModelScope.launch {
-            val response = apiService.sendMessage(content)
+            val response = apiService.sendMessage(_messages.value)
             _isLoading.value = false
-            
+
             android.util.Log.d("AssistantVM", "收到回复: $response")
-            
+
             val aiReply = response ?: "抱歉，我暂时无法回答你的问题，请稍后重试。"
             val aiMsg = ChatMessage(content = aiReply, isUser = false)
             _messages.value = _messages.value + aiMsg

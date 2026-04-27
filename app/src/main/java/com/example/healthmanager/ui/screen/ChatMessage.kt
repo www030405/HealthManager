@@ -5,4 +5,6 @@ data class ChatMessage(
     val content: String,
     val isUser: Boolean,
     val timestamp: Long = System.currentTimeMillis()
-)
+) {
+    val role: String get() = if (isUser) "user" else "assistant"
+}
