@@ -53,6 +53,16 @@ fun HomeScreen(navController: NavController) {
         hcVm.checkPermissions()
     }
 
+    // 监听跨天复位事件：让 HC 基准失效并重新拉取新一天的步数
+    LaunchedEffect(Unit) {
+        exerciseVm.dailyResetEvent.collect {
+            hcVm.invalidateBaseline()
+            exerciseVm.applyHCBaseline(0L)
+            scoreVm.applyHCBaseline(0L)
+            hcVm.syncTodaySteps()
+        }
+    }
+
     // 用户切换时重新初始化健康评分
     LaunchedEffect(user) {
         scoreVm.init(
@@ -88,12 +98,22 @@ fun HomeScreen(navController: NavController) {
     val hcSteps by hcVm.todayStepsFromHC.collectAsState()
     val hcPermission by hcVm.permissionGranted.collectAsState()
     val syncStatus by hcVm.syncStatus.collectAsState()
-    // 优先级：Health Connect > 传感器实时步数 > 数据库手动记录
-    val displaySteps = when {
-        hcPermission && hcSteps > 0 -> hcSteps.toInt()
-        sensorSteps > 0 -> sensorSteps
-        else -> todaySteps
+
+    // HC 权限授予后，拉取一次今日步数（幂等保护已在 syncTodaySteps 内部）
+    LaunchedEffect(hcPermission) {
+        if (hcPermission) hcVm.syncTodaySteps()
     }
+    // HC 步数到达 → 注入到两个 VM 作为今日基准；本 app 不再向 HC 写步数。
+    // 仅在权限已授予且确实读到值时推送，避免初始 0L 覆盖 prefs 恢复的 baseline。
+    LaunchedEffect(hcSteps, hcPermission) {
+        if (hcPermission && hcSteps > 0L) {
+            exerciseVm.applyHCBaseline(hcSteps)
+            scoreVm.applyHCBaseline(hcSteps)
+        }
+    }
+
+    // 单一来源：sensorSteps 已经是 HC 基准 + 传感器增量；HC 不可用时退化为纯传感器
+    val displaySteps = if (sensorSteps > 0) sensorSteps else todaySteps
 
     // 目标值
     val targetSteps = user?.targetSteps ?: 8000
@@ -216,11 +236,7 @@ fun HomeScreen(navController: NavController) {
             ) {
                 SummaryCard(
                     modifier = Modifier.weight(1f),
-                    title = when {
-                        hcPermission && hcSteps > 0 -> "步数 (HC)"
-                        sensorSteps > 0 -> "步数 (实时)"
-                        else -> "步数"
-                    },
+                    title = "步数",
                     value = "$displaySteps",
                     unit = "步",
                     icon = Icons.Default.DirectionsWalk,

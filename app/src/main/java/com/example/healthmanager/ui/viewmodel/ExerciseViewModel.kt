@@ -39,6 +39,27 @@ class ExerciseViewModel(application: Application) : AndroidViewModel(application
 
     fun dismissSedentary() = stepCounter.dismissSedentary()
 
+    /**
+     * 跨天复位事件流。HomeScreen 监听此事件，
+     * 在收到时让 HC 基准失效并触发新一天的重新拉取。
+     */
+    private val _dailyResetEvent = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val dailyResetEvent: SharedFlow<String> = _dailyResetEvent
+
+    init {
+        stepCounter.onDailyReset = { newDate ->
+            _dailyResetEvent.tryEmit(newDate)
+        }
+    }
+
+    /**
+     * 由 HomeScreen 在 HC 步数到达时调用，注入"今日开始时已有步数"基准。
+     * stepCounter 的对外 steps StateFlow 会即时反映 baseline + sensor delta。
+     */
+    fun applyHCBaseline(baseline: Long) {
+        stepCounter.setDailyBaseline(baseline)
+    }
+
     private val gaitClassifier = GaitClassifier(application)
     val gaitResult: StateFlow<GaitResult?> = gaitClassifier.gaitResult
 

@@ -32,9 +32,14 @@ class HealthScoreViewModel(application: Application) : AndroidViewModel(applicat
     private val sleepRepo = SleepRepository(db.sleepDao())
     private val dietRepo = DietRepository(db.dietDao())
 
-    // 传感器实时步数（实时更新）
+    // 传感器实时步数（已包含 HC 当日基准 + 传感器增量）
     private val stepCounter = StepCounterManager(application)
     val sensorSteps: StateFlow<Int> = stepCounter.steps
+
+    /** 由 HomeScreen 推送 HC 当日基准 */
+    fun applyHCBaseline(baseline: Long) {
+        stepCounter.setDailyBaseline(baseline)
+    }
 
     private val _userId = MutableStateFlow(0)
     private val _targetSteps = MutableStateFlow(8000)

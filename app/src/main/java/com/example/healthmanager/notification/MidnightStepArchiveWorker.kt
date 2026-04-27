@@ -36,18 +36,21 @@ class MidnightStepArchiveWorker(
             return Result.success()
         }
 
-        // 从 StepCounterManager 的 SharedPreferences 读取传感器步数
+        // 从 StepCounterManager 的 SharedPreferences 读取传感器步数 + HC 基准
         val stepPrefs: SharedPreferences =
             context.getSharedPreferences("step_counter_prefs", Context.MODE_PRIVATE)
         val initialSteps = stepPrefs.getLong("initial_steps", -1L)
         val lastTotalSteps = stepPrefs.getLong("last_total_steps", -1L)
+        val dailyBaseline = stepPrefs.getLong("daily_baseline", 0L)
 
         if (initialSteps < 0 || lastTotalSteps < 0) {
             Log.w(TAG, "没有传感器步数数据，跳过归档")
             return Result.success()
         }
 
-        val sensorSteps = (lastTotalSteps - initialSteps).toInt()
+        // 归档总步数 = HC 当日基准 + 传感器增量，与 UI 显示口径一致
+        val sensorDelta = (lastTotalSteps - initialSteps).toInt()
+        val sensorSteps = (dailyBaseline + sensorDelta).toInt()
         if (sensorSteps <= 0) {
             Log.w(TAG, "传感器步数为0，跳过归档")
             return Result.success()

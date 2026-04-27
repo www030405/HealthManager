@@ -189,7 +189,7 @@ class HealthConnectManager(private val context: Context) {
     // ─────────────────────────────────────────────
 
     /**
-     * 写入运动会话（由CNN识别步态后调用）
+     * 写入运动会话(规则基础分类)
      * @param exerciseType 使用 ExerciseSessionRecord.EXERCISE_TYPE_* 常量
      */
     @SuppressLint("RestrictedApi")

@@ -41,8 +41,29 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
     private val KEY_LAST_TOTAL_STEPS = "last_total_steps"
     private val KEY_LAST_DATE = "last_date"
     private val KEY_CURRENT_STEPS = "current_steps"
+    private val KEY_DAILY_BASELINE = "daily_baseline"
+
+    /**
+     * 当日传感器增量（自 app 启动以来累计的步数）。
+     * 与 dailyBaseline 相加得到对外暴露的"今日总步数"。
+     */
+    private var sensorDelta = 0
+
+    /**
+     * 由外部（HealthConnectViewModel 经 ExerciseViewModel/HealthScoreViewModel）注入的
+     * "今日开始时已有步数"，从 Health Connect 单次读取得到。
+     * HC 不可用 / 未授权 / 未读取时为 0，等价于纯本地传感器模式。
+     */
+    private var dailyBaseline = 0L
+
+    /**
+     * 跨天复位回调（兜底 ① / ② / ③ 任一触发都会调）。
+     * 上层用它来：1) 让 HC 当天的"已读取"标记失效；2) 触发新一天的 HC 基准重新拉取。
+     */
+    var onDailyReset: ((newDate: String) -> Unit)? = null
 
     private val _steps = MutableStateFlow(0)
+    /** 对外暴露的"今日总步数" = dailyBaseline + sensorDelta */
     val steps: StateFlow<Int> = _steps
 
     val isAvailable: Boolean get() = stepSensor != null
@@ -133,19 +154,36 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
     /**
      * 执行跨天复位：归档昨日步数、清空内存与 prefs、刷新会话日期。
      * 三条兜底路径（start / onSensorChanged / 定时）均收敛到这里，避免逻辑分叉。
+     * 归档的是"今日总步数"（dailyBaseline + sensorDelta），保证图表与 UI 一致。
      */
     private fun performDailyReset(newDate: String) {
         val previousDate = currentSessionDate
-        val previousSteps = _steps.value
-        if (previousSteps > 0) {
-            archiveYesterdaySteps(previousDate, previousSteps)
+        val previousTotal = _steps.value  // 已经是组合值
+        if (previousTotal > 0) {
+            archiveYesterdaySteps(previousDate, previousTotal)
         }
         initialSteps = -1L
+        sensorDelta = 0
+        dailyBaseline = 0L
         _steps.value = 0
         lastUpdateStepCount = 0
         prefs.edit().clear().apply()
         currentSessionDate = newDate
-        Log.d("StepCounter", "已复位到 $newDate，归档 $previousDate: $previousSteps 步")
+        Log.d("StepCounter", "已复位到 $newDate，归档 $previousDate: $previousTotal 步")
+        // 通知上层：清空 HC 基准缓存并触发新一天的重新读取
+        onDailyReset?.invoke(newDate)
+    }
+
+    /**
+     * 由上层（ExerciseViewModel/HealthScoreViewModel）在收到 HC 当日步数后调用。
+     * 设置后立刻刷新 _steps，让 UI 平滑跳到 baseline + delta。
+     */
+    fun setDailyBaseline(baseline: Long) {
+        if (baseline < 0L) return
+        dailyBaseline = baseline
+        _steps.value = (baseline + sensorDelta).toInt()
+        saveCurrentState()
+        Log.d("StepCounter", "已注入 HC 基准：$baseline，当前显示步数：${_steps.value}")
     }
 
     /**
@@ -160,26 +198,36 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
         val todayStr = LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE)
 
         if (savedInitialSteps >= 0 && lastDate == todayStr) {
-            // 同一天，恢复之前的状态
+            // 同一天，恢复之前的状态（包括 HC 基准）
             initialSteps = savedInitialSteps
-            _steps.value = savedCurrentSteps
-            lastUpdateStepCount = savedCurrentSteps
+            dailyBaseline = prefs.getLong(KEY_DAILY_BASELINE, 0L)
+            sensorDelta = savedCurrentSteps  // 持久化的是 sensor delta（不含 baseline）
+            _steps.value = (dailyBaseline + sensorDelta).toInt()
+            lastUpdateStepCount = sensorDelta
             currentSessionDate = todayStr
-            Log.d("StepCounter", "恢复基准值：$initialSteps, 当前步数：${_steps.value}")
+            Log.d("StepCounter", "恢复：sensor delta=$sensorDelta, baseline=$dailyBaseline, 显示=${_steps.value}")
         } else if (lastDate != null && lastDate != todayStr) {
             // 兜底①：启动时检测到跨天
-            if (savedCurrentSteps > 0) {
-                archiveYesterdaySteps(lastDate, savedCurrentSteps)
+            // 归档的是昨天保存的"总步数"（lastDate 当天的 baseline + delta）
+            val lastBaseline = prefs.getLong(KEY_DAILY_BASELINE, 0L)
+            val lastTotal = (lastBaseline + savedCurrentSteps).toInt()
+            if (lastTotal > 0) {
+                archiveYesterdaySteps(lastDate, lastTotal)
             }
             initialSteps = -1L
+            sensorDelta = 0
+            dailyBaseline = 0L
             _steps.value = 0
             lastUpdateStepCount = 0
             prefs.edit().clear().apply()
             currentSessionDate = todayStr
-            Log.d("StepCounter", "新的一天($todayStr)，重置计步器，已归档 $lastDate: $savedCurrentSteps 步")
+            Log.d("StepCounter", "新的一天($todayStr)，已归档 $lastDate: $lastTotal 步")
+            onDailyReset?.invoke(todayStr)
         } else {
             // 首次使用或无有效数据
             initialSteps = -1L
+            sensorDelta = 0
+            dailyBaseline = 0L
             _steps.value = 0
             lastUpdateStepCount = 0
             prefs.edit().clear().apply()
@@ -236,10 +284,13 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
         if (initialSteps >= 0) {
             prefs.edit().apply {
                 putLong(KEY_INITIAL_STEPS, initialSteps)
-                putLong(KEY_LAST_TOTAL_STEPS, initialSteps + _steps.value)
+                // KEY_LAST_TOTAL_STEPS = sensor 视角的累计读数，仅用于 worker 计算 sensor delta
+                putLong(KEY_LAST_TOTAL_STEPS, initialSteps + sensorDelta)
                 // 用会话日期而非系统日期，避免零点后未及时复位时把昨日步数挂到今日日期下。
                 putString(KEY_LAST_DATE, currentSessionDate)
-                putInt(KEY_CURRENT_STEPS, _steps.value)
+                // 持久化 sensor delta（不含 baseline），便于 worker 单独取出 sensor 部分
+                putInt(KEY_CURRENT_STEPS, sensorDelta)
+                putLong(KEY_DAILY_BASELINE, dailyBaseline)
             }.apply()
         }
     }
@@ -262,11 +313,12 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
                 return
             }
 
-            val currentSteps = (totalSteps - initialSteps).toInt()
+            val currentDelta = (totalSteps - initialSteps).toInt()
 
-            if (currentSteps != lastUpdateStepCount && currentSteps >= 0) {
-                lastUpdateStepCount = currentSteps
-                _steps.value = currentSteps
+            if (currentDelta != lastUpdateStepCount && currentDelta >= 0) {
+                lastUpdateStepCount = currentDelta
+                sensorDelta = currentDelta
+                _steps.value = (dailyBaseline + currentDelta).toInt()
                 saveCurrentState()
 
                 // 步数变化 → 重置久坐状态
@@ -281,6 +333,8 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
 
     fun resetSteps() {
         initialSteps = -1L
+        sensorDelta = 0
+        dailyBaseline = 0L
         _steps.value = 0
         lastUpdateStepCount = 0
         saveCurrentState()
