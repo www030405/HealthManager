@@ -313,6 +313,20 @@ class StepCounterManager(private val context: Context) : SensorEventListener {
                 return
             }
 
+            // 兜底④：检测设备重启导致的 TYPE_STEP_COUNTER 计数清零
+            // 同一天内 totalSteps 不可能小于 initialSteps，唯一可能就是 sensor 被重启归零。
+            // 保留已累计的 sensorDelta，将 initialSteps 平移对齐到当前读数，后续累加正常。
+            if (totalSteps < initialSteps) {
+                Log.w(
+                    "StepCounter",
+                    "检测到传感器计数回退（设备重启？）：totalSteps=$totalSteps < " +
+                        "initialSteps=$initialSteps，保留 sensorDelta=$sensorDelta 并重新对齐基准"
+                )
+                initialSteps = totalSteps - sensorDelta
+                saveCurrentState()
+                return
+            }
+
             val currentDelta = (totalSteps - initialSteps).toInt()
 
             if (currentDelta != lastUpdateStepCount && currentDelta >= 0) {
